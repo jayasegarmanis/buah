@@ -194,6 +194,16 @@
     <div class="card"><div class="table-wrap"><table id="tbl-produk"></table></div></div>
   </section>
 
+  <!-- PELANGGAN -->
+  <section class="view" data-view="pelanggan">
+    <div class="view-head"><h2>Pelanggan</h2><div class="spacer"></div>
+      <button class="btn" onclick="openPelangganForm()">+ Pelanggan baru</button></div>
+    <div class="card" style="margin-bottom:14px"><div class="panel" style="padding:12px 14px">
+      <input id="plg-cari" placeholder="Cari nama / telp pelanggan…" oninput="renderPelanggan()" style="margin:0">
+    </div></div>
+    <div class="card"><div class="table-wrap"><table id="tbl-pelanggan"></table></div></div>
+  </section>
+
   <!-- STOK MASUK -->
   <section class="view" data-view="masuk">
     <div class="view-head"><h2>Stok Masuk</h2></div>
@@ -224,7 +234,7 @@
     <div class="card" style="margin-bottom:18px"><div class="panel">
       <div class="panel-title">Buat invoice baru</div>
       <div class="grid2">
-        <label class="field"><span class="lab">Pelanggan *</span><input id="pj-pelanggan" placeholder="Nama pelanggan"></label>
+        <label class="field"><span class="lab">Pelanggan *</span><input id="pj-pelanggan" list="pelanggan-list" placeholder="Ketik atau pilih pelanggan" oninput="onPelangganPick()"><datalist id="pelanggan-list"></datalist></label>
         <label class="field"><span class="lab">No. telp (opsional)</span><input id="pj-telp"></label>
       </div>
       <label class="field"><span class="lab">Alamat (opsional)</span><input id="pj-alamat"></label>
@@ -305,9 +315,9 @@
 const CONFIG = { API_URL: "https://script.google.com/macros/s/AKfycbytiMu1hfqVLKXx7sGlzvjsP5JTGo-GyhGfgxsWaPA8TSrjL8gVA718H6santiw2JlRPQ/exec" };
 let RUNTIME_API_URL = "";
 
-const TABS = [["dashboard","Dashboard"],["produk","Master Buah"],["masuk","Stok Masuk"],
+const TABS = [["dashboard","Dashboard"],["produk","Master Buah"],["pelanggan","Pelanggan"],["masuk","Stok Masuk"],
   ["jual","Penjualan"],["stok","Stok"],["piutang","Piutang"]];
-const state = { produk:[], peng:null };
+const state = { produk:[], pelanggan:[], peng:null };
 const BLN = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"];
 
 const $ = (s,r=document)=>r.querySelector(s);
@@ -351,6 +361,7 @@ function switchTab(k){
   window.scrollTo({top:0});
   if(k==="dashboard")loadDashboard();
   if(k==="produk")loadProduk();
+  if(k==="pelanggan")loadPelanggan();
   if(k==="masuk")initMasuk();
   if(k==="jual")initJual();
   if(k==="stok")loadStok();
@@ -528,6 +539,60 @@ async function toggleProduk(id,aktif){
   catch(e){ toast(e.message,"err"); }
 }
 
+/* ============== PELANGGAN ============== */
+async function loadPelangganCache(force){
+  if(state.pelanggan.length && !force) return state.pelanggan;
+  state.pelanggan=await api("listPelanggan",{});
+  syncPelangganDatalist();
+  return state.pelanggan;
+}
+function pelangganByNama(nama){ const k=String(nama||"").trim().toLowerCase(); return state.pelanggan.find(p=>String(p.nama).trim().toLowerCase()===k); }
+function syncPelangganDatalist(){
+  const dl=$("#pelanggan-list"); if(!dl) return;
+  dl.innerHTML=state.pelanggan.filter(p=>String(p.aktif)!=="FALSE").map(p=>'<option value="'+esc(p.nama)+'">'+(p.telp?esc(p.telp):"")+'</option>').join("");
+}
+async function loadPelanggan(){
+  try{ await loadPelangganCache(true); renderPelanggan(); }
+  catch(e){ $("#tbl-pelanggan").innerHTML='<tbody><tr><td><div class="empty">Gagal: '+esc(e.message)+'</div></td></tr></tbody>'; }
+}
+function renderPelanggan(){
+  const t=$("#tbl-pelanggan"); const q=($("#plg-cari")?$("#plg-cari").value:"").trim().toLowerCase();
+  let rows=state.pelanggan;
+  if(q) rows=rows.filter(p=>(String(p.nama)+" "+String(p.telp||"")).toLowerCase().includes(q));
+  if(!state.pelanggan.length){ t.innerHTML='<tbody><tr><td><div class="empty">Belum ada pelanggan. Klik “+ Pelanggan baru” atau impor dari Mekari.</div></td></tr></tbody>'; return; }
+  if(!rows.length){ t.innerHTML='<tbody><tr><td><div class="empty">Tidak ada yang cocok dengan “'+esc(q)+'”.</div></td></tr></tbody>'; return; }
+  t.innerHTML='<thead><tr><th>Nama</th><th>Telp</th><th>Alamat</th><th>Aksi</th></tr></thead><tbody>'+
+    rows.slice(0,400).map(r=>{ const aktif=String(r.aktif)!=="FALSE";
+      return '<tr style="'+(aktif?'':'opacity:.5')+'"><td class="strong">'+esc(r.nama)+(aktif?'':' <span class="chip neutral">nonaktif</span>')+'</td>'+
+        '<td>'+esc(r.telp||"—")+'</td><td class="muted">'+esc(r.alamat||"—")+'</td>'+
+        '<td><button class="linkish" onclick="openPelangganForm(\''+r.id+'\')">Edit</button>'+
+        '<button class="linkish" onclick="togglePelanggan(\''+r.id+'\','+(!aktif)+')">'+(aktif?"Nonaktifkan":"Aktifkan")+'</button></td></tr>';
+    }).join("")+'</tbody>'+(rows.length>400?'<tfoot><tr><td colspan="4" class="muted" style="padding:10px">Menampilkan 400 dari '+rows.length+'. Pakai kotak cari untuk mempersempit.</td></tr></tfoot>':'');
+}
+function pelangganById(id){ return state.pelanggan.find(p=>String(p.id)===String(id)); }
+function openPelangganForm(id){
+  const p=id?pelangganById(id)||{}:{};
+  const f=(k,lab,val,attr)=>'<label class="field"><span class="lab">'+lab+'</span><input id="plf-'+k+'" value="'+esc(val==null?"":val)+'" '+(attr||"")+'></label>';
+  openModal(id?"Edit pelanggan":"Pelanggan baru",
+    f("nama","Nama pelanggan *",p.nama)+
+    '<div class="grid2">'+f("telp","No. telp",p.telp)+f("email","Email",p.email)+'</div>'+
+    f("alamat","Alamat",p.alamat)+
+    f("catatan","Catatan",p.catatan),
+    '<button class="btn sec" onclick="closeModal()">Batal</button><button class="btn" onclick="savePelanggan(\''+(id||"")+'\')">Simpan</button>');
+}
+async function savePelanggan(id){
+  const v=k=>$("#plf-"+k).value;
+  if(!v("nama").trim()){ toast("Nama wajib diisi","err"); return; }
+  try{
+    await api("savePelanggan",{ id:id||undefined, nama:v("nama"), telp:v("telp"), email:v("email"), alamat:v("alamat"), catatan:v("catatan") });
+    toast("Pelanggan tersimpan","ok"); closeModal(); await loadPelangganCache(true); renderPelanggan();
+  }catch(e){ toast(e.message,"err"); }
+}
+async function togglePelanggan(id,aktif){
+  try{ await api("setPelangganAktif",{id,aktif}); await loadPelangganCache(true); renderPelanggan(); }
+  catch(e){ toast(e.message,"err"); }
+}
+
 /* ============== STOK MASUK ============== */
 async function initMasuk(){
   await loadProdukCache();
@@ -583,11 +648,16 @@ async function hapusPembelian(id){
 /* ============== PENJUALAN ============== */
 async function initJual(){
   await loadProdukCache();
+  await loadPelangganCache();
   if(!$("#pj-tgl").value) $("#pj-tgl").value=todayStr();
   applyTermin();
   if(!$("#pj-items").children.length) addPenjRow();
   recalcPenj();
   loadPenjualan();
+}
+function onPelangganPick(){
+  const p=pelangganByNama($("#pj-pelanggan").value);
+  if(p){ $("#pj-telp").value=p.telp||""; $("#pj-alamat").value=p.alamat||""; }
 }
 function applyTermin(){
   const t=$("#pj-termin").value; if(t==="-1") return;
