@@ -121,6 +121,37 @@
   .chart .bar{fill:var(--leaf)} .chart .bar:hover{fill:var(--leaf-dark)}
   .chart .blabel{font-size:11px;fill:var(--ink-soft);font-family:var(--sans)}
   .chart .bval{font-size:10px;fill:var(--ink);font-family:var(--sans);font-weight:700}
+  .chart .bar-omset{fill:var(--leaf)} .chart .bar-omset:hover{fill:var(--leaf-dark)}
+  .chart .bar-laba{fill:var(--amber)} .chart .bar-laba:hover{fill:#a86600}
+  .chart .grid-line{stroke:#EEEDE7} .chart .axis-val{font-size:9px;fill:#9aa39d;font-family:var(--sans)}
+  @media (max-width:560px){ .chart svg{min-width:540px} }
+
+  /* KPI cards (gaya Mekari) */
+  .kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px;margin-bottom:16px}
+  .kpi{background:#fff;border:1px solid var(--line);border-left:4px solid var(--line);border-radius:14px;padding:15px;box-shadow:var(--shadow)}
+  .kpi.leaf{border-left-color:var(--leaf)} .kpi.amber{border-left-color:var(--amber)}
+  .kpi.red{border-left-color:var(--danger)} .kpi.blue{border-left-color:var(--blue)}
+  .kpi .k-label{font-size:12px;color:var(--ink-soft);font-weight:600}
+  .kpi .k-val{font-size:22px;font-weight:800;margin-top:6px;letter-spacing:-.02em}
+  .kpi .k-sub{font-size:12px;color:var(--ink-soft);margin-top:3px}
+  /* breakdown sub-cards */
+  .brk-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .brk{border:1px solid var(--line);border-top:3px solid var(--line);border-radius:12px;padding:14px;background:#fff}
+  .brk.amber{border-top-color:var(--amber)} .brk.red{border-top-color:var(--danger)}
+  .brk.green{border-top-color:var(--leaf)} .brk.neutral{border-top-color:#9aa39d}
+  .brk-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .brk-name{font-size:13px;font-weight:700}
+  .brk-badge{font-size:11px;font-weight:800;padding:2px 9px;border-radius:999px;background:#EFEEE8;color:var(--ink-soft)}
+  .brk.amber .brk-badge{background:var(--amber-soft);color:var(--amber)}
+  .brk.red .brk-badge{background:var(--danger-soft);color:var(--danger)}
+  .brk.green .brk-badge{background:var(--leaf-soft);color:var(--leaf-dark)}
+  .brk-total-lab{font-size:11px;color:var(--ink-soft)}
+  .brk-amt{font-size:18px;font-weight:800;margin-top:2px}
+  .brk.amber .brk-amt{color:var(--amber)} .brk.red .brk-amt{color:var(--danger)} .brk.green .brk-amt{color:var(--leaf-dark)}
+  .chart-legend{display:flex;gap:16px;margin-bottom:10px;font-size:12px;color:var(--ink-soft);font-weight:600}
+  .chart-legend .lg{display:inline-flex;align-items:center;gap:6px}
+  .chart-legend .sw{width:11px;height:11px;border-radius:3px;display:inline-block}
+  @media (max-width:680px){ .brk-grid{grid-template-columns:1fr} }
 
   @media (max-width:560px){
     .grid2,.grid3{grid-template-columns:1fr}
@@ -371,40 +402,66 @@ async function loadDashboard(){
   const c=$("#dash");
   if(!isConfigured()){ c.innerHTML='<div class="empty">Sambungkan server dulu lewat Pengaturan.</div>'; return; }
   try{
-    const d=await api("dashboard");
+    const [d, piutang]=await Promise.all([ api("dashboard"), api("listPiutang",{}) ]);
+    let belumJ=0,belumT=0, telatJ=0,telatT=0;
+    piutang.forEach(r=>{ if(r.terlambatHari!==null && r.terlambatHari>0){ telatJ++; telatT+=r.sisa; } else { belumJ++; belumT+=r.sisa; } });
     c.innerHTML=
-      '<div class="stats">'+
-        statCard("Omset bulan ini",rp(d.omsetBulanIni),d.transaksiBulanIni+" transaksi","accent")+
-        statCard("Laba kotor bulan ini",rp(d.labaBulanIni),"","")+
-        statCard("Piutang berjalan",rp(d.totalPiutang),d.jumlahPiutang+" invoice belum lunas",d.totalPiutang>0?"warn":"")+
-        statCard("Nilai stok",rp(d.totalNilaiStok),qty(d.totalQtyStok)+" unit · "+d.totalProduk+" produk","")+
+      '<div class="kpi-row">'+
+        kpiCard("Omset bulan ini",rp(d.omsetBulanIni),d.transaksiBulanIni+" transaksi","leaf")+
+        kpiCard("Laba kotor bulan ini",rp(d.labaBulanIni),"jual − beli","blue")+
+        kpiCard("Total piutang",rp(d.totalPiutang),d.jumlahPiutang+" invoice belum lunas",d.totalPiutang>0?"amber":"")+
+        kpiCard("Nilai stok",rp(d.totalNilaiStok),qty(d.totalQtyStok)+" unit · "+d.totalProduk+" produk","")+
       '</div>'+
-      '<div class="card"><div class="panel"><div class="panel-title">Omset penjualan — 6 bulan terakhir</div>'+
+      '<div class="card" style="margin-bottom:16px"><div class="panel"><div class="panel-title">Status piutang</div>'+
+        '<div class="brk-grid">'+
+          brkCard("Belum jatuh tempo",belumJ,rp(belumT),"amber")+
+          brkCard("Telat / lewat tempo",telatJ,rp(telatT),"red")+
+          brkCard("Total piutang",belumJ+telatJ,rp(belumT+telatT),"neutral")+
+        '</div>'+
+        (piutang.length?'<div style="margin-top:12px"><button class="linkish" onclick="switchTab(\'piutang\')">Buka daftar piutang →</button></div>':'')+
+      '</div></div>'+
+      '<div class="card"><div class="panel"><div class="panel-title">Omset & laba kotor — 6 bulan terakhir</div>'+
+        '<div class="chart-legend"><span class="lg"><span class="sw" style="background:var(--leaf)"></span>Omset</span>'+
+        '<span class="lg"><span class="sw" style="background:var(--amber)"></span>Laba kotor</span></div>'+
         '<div class="chart chart-wrap">'+omsetChart(d.omsetBulanan)+'</div></div></div>'+
       (d.produkStokRendah>0?'<div style="margin-top:14px"><span class="chip warn">'+d.produkStokRendah+' produk di bawah stok minimum</span> <button class="linkish" onclick="switchTab(\'stok\')">Lihat stok →</button></div>':"");
   }catch(e){ c.innerHTML='<div class="empty">Gagal memuat: '+esc(e.message)+'</div>'; }
+}
+function kpiCard(label,val,sub,cls){
+  return '<div class="kpi '+(cls||"")+'"><div class="k-label">'+esc(label)+'</div><div class="k-val num">'+esc(val)+'</div>'+(sub?'<div class="k-sub">'+esc(sub)+'</div>':'')+'</div>';
+}
+function brkCard(name,count,amt,cls){
+  return '<div class="brk '+cls+'"><div class="brk-top"><span class="brk-name">'+esc(name)+'</span><span class="brk-badge">'+count+'</span></div><div class="brk-total-lab">Total</div><div class="brk-amt num">'+esc(amt)+'</div></div>';
 }
 function statCard(label,val,sub,cls){
   return '<div class="stat '+(cls||"")+'"><div class="label">'+esc(label)+'</div><div class="value num">'+esc(val)+'</div>'+(sub?'<div class="sub">'+esc(sub)+'</div>':'')+'</div>';
 }
 function omsetChart(data){
-  if(!data||!data.length) return '<div class="empty">Belum ada data.</div>';
-  const W=620,H=210,padB=34,padT=24,padX=10;
-  const max=Math.max.apply(null,data.map(d=>d.omset)) || 1;
-  const n=data.length, gap=14, bw=(W-padX*2-gap*(n-1))/n;
+  if(!data||!data.length) return '<div class="empty">Belum ada data penjualan.</div>';
+  const W=640,H=240,padL=46,padR=12,padT=14,padB=30;
+  const innerW=W-padL-padR, innerH=H-padT-padB;
+  let max=0; data.forEach(d=>{ max=Math.max(max,d.omset,d.laba); });
+  const top=niceCeil(max);
+  const n=data.length, groupW=innerW/n, sideGap=groupW*0.18, barGap=4;
+  const bw=Math.max(4,(groupW-sideGap*2-barGap)/2);
+  let grid="", ticks=4;
+  for(let i=0;i<=ticks;i++){ const v=top*i/ticks, y=padT+innerH-(v/top)*innerH;
+    grid+='<line class="grid-line" x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'"/>';
+    grid+='<text class="axis-val" x="'+(padL-6)+'" y="'+(y+3).toFixed(1)+'" text-anchor="end">'+rpShort(v)+'</text>'; }
   let bars="";
   data.forEach((d,i)=>{
-    const x=padX+i*(bw+gap);
-    const h=Math.max(2,(d.omset/max)*(H-padB-padT));
-    const y=H-padB-h;
-    const lbl=BLN[+d.bulan.slice(5,7)-1];
-    bars+='<rect class="bar" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="4"><title>'+lbl+' '+d.bulan.slice(0,4)+': '+rp(d.omset)+'</title></rect>';
-    if(d.omset>0) bars+='<text class="bval" x="'+(x+bw/2).toFixed(1)+'" y="'+(y-5).toFixed(1)+'" text-anchor="middle">'+rpShort(d.omset)+'</text>';
-    bars+='<text class="blabel" x="'+(x+bw/2).toFixed(1)+'" y="'+(H-12)+'" text-anchor="middle">'+lbl+'</text>';
+    const gx=padL+i*groupW+sideGap;
+    const hO=(d.omset/top)*innerH, hL=(d.laba/top)*innerH;
+    const yO=padT+innerH-hO, yL=padT+innerH-hL;
+    const ml=BLN[+d.bulan.slice(5,7)-1]+' '+d.bulan.slice(0,4);
+    bars+='<rect class="bar-omset" x="'+gx.toFixed(1)+'" y="'+yO.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+Math.max(0,hO).toFixed(1)+'" rx="3"><title>Omset '+ml+': '+rp(d.omset)+'</title></rect>';
+    bars+='<rect class="bar-laba" x="'+(gx+bw+barGap).toFixed(1)+'" y="'+yL.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+Math.max(0,hL).toFixed(1)+'" rx="3"><title>Laba '+ml+': '+rp(d.laba)+'</title></rect>';
+    bars+='<text class="blabel" x="'+(padL+i*groupW+groupW/2).toFixed(1)+'" y="'+(H-10)+'" text-anchor="middle">'+BLN[+d.bulan.slice(5,7)-1]+'</text>';
   });
   return '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet" role="img">'+
-    '<line x1="'+padX+'" y1="'+(H-padB)+'" x2="'+(W-padX)+'" y2="'+(H-padB)+'" stroke="#E6E3DA"/>'+bars+'</svg>';
+    grid+'<line x1="'+padL+'" y1="'+(padT+innerH)+'" x2="'+(W-padR)+'" y2="'+(padT+innerH)+'" stroke="#E6E3DA"/>'+bars+'</svg>';
 }
+function niceCeil(v){ if(v<=0)return 1; const p=Math.pow(10,Math.floor(Math.log10(v))); const f=v/p; const steps=[1,1.5,2,2.5,3,4,5,6,8,10]; for(let i=0;i<steps.length;i++){ if(f<=steps[i]+1e-9) return steps[i]*p; } return 10*p; }
 
 /* ============== MASTER BUAH ============== */
 async function loadProduk(){
