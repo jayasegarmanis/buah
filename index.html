@@ -132,12 +132,15 @@
   @media (max-width:560px){ .chart svg{min-width:540px} }
 
   /* KPI cards (gaya Mekari) */
-  .kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px;margin-bottom:16px}
+  .kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(184px,1fr));gap:12px;margin-bottom:16px}
   .kpi{background:#fff;border:1px solid var(--line);border-left:4px solid var(--line);border-radius:14px;padding:15px;box-shadow:var(--shadow)}
   .kpi.leaf{border-left-color:var(--leaf)} .kpi.amber{border-left-color:var(--amber)}
   .kpi.red{border-left-color:var(--danger)} .kpi.blue{border-left-color:var(--blue)}
   .kpi .k-label{font-size:12px;color:var(--ink-soft);font-weight:600}
-  .kpi .k-val{font-size:22px;font-weight:800;margin-top:6px;letter-spacing:-.02em}
+  .kpi .k-val{font-size:22px;font-weight:800;margin-top:6px;letter-spacing:-.02em;white-space:nowrap;overflow:hidden}
+  .kpi.kpi-link{cursor:pointer;transition:box-shadow .15s ease,transform .15s ease}
+  .kpi.kpi-link:hover{box-shadow:0 6px 16px rgba(0,0,0,.12);transform:translateY(-1px)}
+  .kpi.kpi-link:active{transform:translateY(0)}
   .kpi .k-sub{font-size:12px;color:var(--ink-soft);margin-top:3px}
   /* breakdown sub-cards */
   .brk-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
@@ -523,11 +526,11 @@ async function loadDashboard(){
     piutang.forEach(r=>{ if(r.terlambatHari!==null && r.terlambatHari>0){ telatJ++; telatT+=r.sisa; } else { belumJ++; belumT+=r.sisa; } });
     c.innerHTML=
       '<div class="kpi-row">'+
-        kpiCard("Omset bulan ini",rp(d.omsetBulanIni),d.transaksiBulanIni+" transaksi","leaf")+
-        kpiCard("Laba kotor bulan ini",rp(d.labaBulanIni),"jual − beli","blue")+
-        kpiCard("Total piutang",rp(d.totalPiutang),d.jumlahPiutang+" invoice belum lunas",d.totalPiutang>0?"amber":"")+
-        kpiCard("Total utang",rp(d.totalUtang||0),(d.jumlahUtang||0)+" faktur ke supplier",(d.totalUtang>0)?"red":"")+
-        kpiCard("Nilai stok",rp(d.totalNilaiStok),qty(d.totalQtyStok)+" unit · "+d.totalProduk+" produk","")+
+        kpiCard("Omset bulan ini",rp(d.omsetBulanIni),d.transaksiBulanIni+" transaksi","leaf","jual")+
+        kpiCard("Laba kotor bulan ini",rp(d.labaBulanIni),"jual − beli","blue","jual")+
+        kpiCard("Total piutang",rp(d.totalPiutang),d.jumlahPiutang+" invoice belum lunas",d.totalPiutang>0?"amber":"","piutang")+
+        kpiCard("Total utang",rp(d.totalUtang||0),(d.jumlahUtang||0)+" faktur ke supplier",(d.totalUtang>0)?"red":"","hutang")+
+        kpiCard("Nilai stok",rp(d.totalNilaiStok),qty(d.totalQtyStok)+" unit · "+d.totalProduk+" produk","","stok")+
       '</div>'+
       '<div class="card" style="margin-bottom:16px"><div class="panel"><div class="panel-title">Status piutang</div>'+
         '<div class="brk-grid">'+
@@ -542,10 +545,20 @@ async function loadDashboard(){
         '<span class="lg"><span class="sw" style="background:var(--amber)"></span>Laba kotor</span></div>'+
         '<div class="chart chart-wrap">'+omsetChart(d.omsetBulanan)+'</div></div></div>'+
       (d.produkStokRendah>0?'<div style="margin-top:14px"><span class="chip warn">'+d.produkStokRendah+' produk di bawah stok minimum</span> <button class="linkish" onclick="switchTab(\'stok\')">Lihat stok →</button></div>':"");
+    fitKpiValues();
   }catch(e){ c.innerHTML='<div class="empty">Gagal memuat: '+esc(e.message)+'</div>'; }
 }
-function kpiCard(label,val,sub,cls){
-  return '<div class="kpi '+(cls||"")+'"><div class="k-label">'+esc(label)+'</div><div class="k-val num">'+esc(val)+'</div>'+(sub?'<div class="k-sub">'+esc(sub)+'</div>':'')+'</div>';
+function kpiCard(label,val,sub,cls,nav){
+  const extra=nav?" kpi-link":"";
+  const attrs=nav?' role="button" tabindex="0" onclick="switchTab(\''+nav+'\')"':"";
+  return '<div class="kpi '+(cls||"")+extra+'"'+attrs+'><div class="k-label">'+esc(label)+'</div><div class="k-val num">'+esc(val)+'</div>'+(sub?'<div class="k-sub">'+esc(sub)+'</div>':'')+'</div>';
+}
+function fitKpiValues(){
+  document.querySelectorAll(".kpi .k-val").forEach(function(el){
+    if(el.clientWidth<40) return;
+    var size=22, min=13; el.style.fontSize=size+"px";
+    while(el.scrollWidth>el.clientWidth+0.5 && size>min){ size--; el.style.fontSize=size+"px"; }
+  });
 }
 function brkCard(name,count,amt,cls){
   return '<div class="brk '+cls+'"><div class="brk-top"><span class="brk-name">'+esc(name)+'</span><span class="brk-badge">'+count+'</span></div><div class="brk-total-lab">Total</div><div class="brk-amt num">'+esc(amt)+'</div></div>';
