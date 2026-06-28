@@ -430,7 +430,16 @@ async function openSettings(){
     fld("set-nama","Nama perusahaan",peng.nama_perusahaan)+
     fld("set-alamat","Alamat",peng.alamat)+
     '<div class="grid2">'+fld("set-telp","Telp",peng.telp)+fld("set-email","Email",peng.email)+'</div>'+
-    fld("set-logo","URL logo (link gambar)",peng.logo_url,"https://.../logo.png")+
+    '<div class="field"><span class="lab">Logo perusahaan</span>'+
+      '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'+
+        '<img id="logo-preview" src="'+esc(peng.logo_url||"")+'" style="max-height:54px;max-width:160px;object-fit:contain;border:1px solid #E6E3DA;border-radius:8px;padding:4px;background:#fff;'+(peng.logo_url?"":"display:none")+'">'+
+        '<span id="logo-empty" class="muted" style="font-size:13px;'+(peng.logo_url?"display:none":"")+'">Belum ada logo</span>'+
+        '<label class="btn sec sm" style="cursor:pointer;margin:0">Unggah logo<input type="file" accept="image/*" onchange="onLogoFile(this)" style="display:none"></label>'+
+        '<button type="button" class="linkish red" onclick="clearLogo()">Hapus</button>'+
+      '</div>'+
+      '<span class="muted" style="font-size:12px">PNG/JPG, otomatis dikecilkan. Tampil di invoice & PDF.</span>'+
+      '<input type="hidden" id="set-logo" value="'+esc(peng.logo_url||"")+'">'+
+    '</div>'+
     fld("set-prefix","Awalan no. invoice",peng.prefix_invoice||"INV")+
     fld("set-footer","Teks footer invoice",peng.footer_invoice,"Terima kasih atas kepercayaan Anda")+
     '<div class="panel-title">Rekening pembayaran (tampil di invoice)</div>'+
@@ -446,6 +455,47 @@ async function saveSettings(){
       footer_invoice:$("#set-footer").value, bank_nama:$("#set-bank").value, bank_rekening:$("#set-rek").value, bank_atasnama:$("#set-an").value });
     toast("Pengaturan tersimpan","ok"); closeModal();
   }catch(e){ toast(e.message,"err"); }
+}
+function shrinkLogo(img){
+  const maxW=240, scale=Math.min(1,maxW/img.width);
+  let w=Math.max(1,Math.round(img.width*scale)), h=Math.max(1,Math.round(img.height*scale));
+  function render(W,H,type,q,bg){
+    const cv=document.createElement("canvas"); cv.width=W; cv.height=H;
+    const ctx=cv.getContext("2d");
+    if(bg){ ctx.fillStyle="#fff"; ctx.fillRect(0,0,W,H); }
+    ctx.drawImage(img,0,0,W,H);
+    return cv.toDataURL(type,q);
+  }
+  let out=render(w,h,"image/png");
+  if(out.length>49000) out=render(w,h,"image/jpeg",0.85,true);
+  if(out.length>49000){ w=Math.round(w*0.7); h=Math.round(h*0.7); out=render(w,h,"image/jpeg",0.8,true); }
+  return out;
+}
+function onLogoFile(input){
+  const file=input.files&&input.files[0]; if(!file) return;
+  if(!/^image\//.test(file.type||"")){ toast("File harus berupa gambar","err"); input.value=""; return; }
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const img=new Image();
+    img.onload=function(){
+      const data=shrinkLogo(img);
+      if(data.length>49000){ toast("Logo terlalu besar — coba gambar yang lebih sederhana","err"); return; }
+      $("#set-logo").value=data;
+      const pv=$("#logo-preview"); pv.src=data; pv.style.display="block";
+      $("#logo-empty").style.display="none";
+      toast("Logo dimuat — jangan lupa Simpan","ok");
+    };
+    img.onerror=function(){ toast("Gagal membaca gambar","err"); };
+    img.src=e.target.result;
+  };
+  reader.onerror=function(){ toast("Gagal membuka file","err"); };
+  reader.readAsDataURL(file);
+  input.value="";
+}
+function clearLogo(){
+  $("#set-logo").value="";
+  const pv=$("#logo-preview"); pv.src=""; pv.style.display="none";
+  $("#logo-empty").style.display="block";
 }
 function renderSetupBanner(){
   $("#setup-banner").innerHTML=isConfigured()?"":'<div class="setup-banner">⚙️ Belum tersambung ke server. Klik <b>Pengaturan</b> (kanan atas) untuk memasukkan URL Web App.</div>';
