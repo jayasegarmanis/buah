@@ -204,27 +204,58 @@
     <div class="card"><div class="table-wrap"><table id="tbl-pelanggan"></table></div></div>
   </section>
 
+  <!-- SUPPLIER -->
+  <section class="view" data-view="supplier">
+    <div class="view-head"><h2>Supplier</h2><div class="spacer"></div>
+      <button class="btn" onclick="openSupplierForm()">+ Supplier baru</button></div>
+    <div class="card" style="margin-bottom:14px"><div class="panel" style="padding:12px 14px">
+      <input id="sup-cari" placeholder="Cari nama / telp supplier…" oninput="renderSupplier()" style="margin:0">
+    </div></div>
+    <div class="card"><div class="table-wrap"><table id="tbl-supplier"></table></div></div>
+  </section>
+
   <!-- STOK MASUK -->
   <section class="view" data-view="masuk">
-    <div class="view-head"><h2>Stok Masuk</h2></div>
+    <div class="view-head"><h2>Pembelian</h2></div>
     <div class="card" style="margin-bottom:18px"><div class="panel">
-      <div class="panel-title">Terima barang</div>
+      <div class="panel-title">Buat faktur pembelian</div>
+      <div class="grid2">
+        <label class="field"><span class="lab">Supplier *</span><input id="pb-supplier" list="supplier-list" placeholder="Ketik atau pilih supplier"><datalist id="supplier-list"></datalist></label>
+        <label class="field"><span class="lab">No. referensi supplier (opsional)</span><input id="pb-faktur" placeholder="No. nota dari supplier"></label>
+      </div>
       <div class="grid3">
-        <label class="field"><span class="lab">Tanggal</span><input type="date" id="pb-tgl"></label>
-        <label class="field"><span class="lab">Supplier</span><input id="pb-supplier" placeholder="Nama supplier"></label>
-        <label class="field"><span class="lab">No. faktur (opsional)</span><input id="pb-faktur"></label>
+        <label class="field"><span class="lab">Tgl. transaksi</span><input type="date" id="pb-tgl" onchange="applyTerminBeli()"></label>
+        <label class="field"><span class="lab">Syarat pembayaran</span>
+          <select id="pb-termin" onchange="applyTerminBeli()">
+            <option value="0">Tunai / COD</option><option value="7">Net 7 hari</option>
+            <option value="14">Net 14 hari</option><option value="30">Net 30 hari</option>
+            <option value="-1">Tanggal manual</option></select></label>
+        <label class="field"><span class="lab">Tgl. jatuh tempo</span><input type="date" id="pb-jt"></label>
       </div>
       <div class="panel-title" style="margin-top:4px">Item</div>
       <div id="pb-items"></div>
       <button class="btn sec sm" onclick="addPembRow()">+ Tambah baris</button>
-      <label class="field" style="margin-top:14px"><span class="lab">Catatan (opsional)</span><input id="pb-catatan"></label>
-      <div class="total-bar"><span>Total pembelian</span><span class="big num" id="pb-total">Rp0</span></div>
+      <div class="penj-foot">
+        <div>
+          <div class="grid2">
+            <label class="field"><span class="lab">Uang muka / dibayar sekarang</span><input type="number" id="pb-dp" min="0" value="0" oninput="recalcPemb()"></label>
+            <label class="field"><span class="lab">Metode bayar</span>
+              <select id="pb-metode"><option>Tunai</option><option>Transfer</option><option>QRIS</option><option>Lainnya</option></select></label>
+          </div>
+          <label class="field"><span class="lab">Catatan (opsional)</span><input id="pb-catatan"></label>
+        </div>
+        <div class="penj-sum">
+          <div class="sum-line grand"><span>Total</span><span class="num" id="pb-total">Rp0</span></div>
+          <div class="sum-line"><span>Dibayar</span><span class="num" id="pb-dibayar">Rp0</span></div>
+          <div class="sum-line est"><span>Sisa (utang)</span><span class="num" id="pb-sisa">Rp0</span></div>
+        </div>
+      </div>
       <div style="margin-top:14px;display:flex;gap:10px">
-        <button class="btn" onclick="submitPembelian()">Simpan stok masuk</button>
+        <button class="btn" onclick="submitPembelian()">Simpan faktur pembelian</button>
         <button class="btn sec" onclick="resetPemb()">Bersihkan</button>
       </div>
     </div></div>
-    <div class="card"><div class="panel"><div class="panel-title">Stok masuk terakhir</div></div>
+    <div class="card"><div class="panel"><div class="panel-title">Pembelian terakhir</div></div>
       <div class="table-wrap"><table id="tbl-pemb"></table></div></div>
   </section>
 
@@ -304,6 +335,15 @@
     <div class="card"><div class="panel"><div class="panel-title">Tagihan belum lunas</div></div>
       <div class="table-wrap"><table id="tbl-piutang"></table></div></div>
   </section>
+
+  <!-- HUTANG -->
+  <section class="view" data-view="hutang">
+    <div class="view-head"><h2>Hutang ke supplier</h2><div class="spacer"></div>
+      <button class="btn sec sm" onclick="loadHutang()">Muat ulang</button></div>
+    <div id="hutang-sum"></div>
+    <div class="card"><div class="panel"><div class="panel-title">Faktur pembelian belum lunas</div></div>
+      <div class="table-wrap"><table id="tbl-hutang"></table></div></div>
+  </section>
 </main>
 
 <div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
@@ -315,9 +355,9 @@
 const CONFIG = { API_URL: "https://script.google.com/macros/s/AKfycbytiMu1hfqVLKXx7sGlzvjsP5JTGo-GyhGfgxsWaPA8TSrjL8gVA718H6santiw2JlRPQ/exec" };
 let RUNTIME_API_URL = "";
 
-const TABS = [["dashboard","Dashboard"],["produk","Master Buah"],["pelanggan","Pelanggan"],["masuk","Stok Masuk"],
-  ["jual","Penjualan"],["stok","Stok"],["piutang","Piutang"]];
-const state = { produk:[], pelanggan:[], peng:null };
+const TABS = [["dashboard","Dashboard"],["produk","Master Buah"],["pelanggan","Pelanggan"],["supplier","Supplier"],["masuk","Pembelian"],
+  ["jual","Penjualan"],["stok","Stok"],["piutang","Piutang"],["hutang","Hutang"]];
+const state = { produk:[], pelanggan:[], supplier:[], peng:null };
 const BLN = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"];
 
 const $ = (s,r=document)=>r.querySelector(s);
@@ -362,10 +402,12 @@ function switchTab(k){
   if(k==="dashboard")loadDashboard();
   if(k==="produk")loadProduk();
   if(k==="pelanggan")loadPelanggan();
+  if(k==="supplier")loadSupplier();
   if(k==="masuk")initMasuk();
   if(k==="jual")initJual();
   if(k==="stok")loadStok();
   if(k==="piutang")loadPiutang();
+  if(k==="hutang")loadHutang();
 }
 
 /* ---- Modal ---- */
@@ -384,34 +426,25 @@ async function openSettings(){
   if(isConfigured() && !state.peng){ try{ peng=await api("getPengaturan"); state.peng=peng; }catch(e){} }
   const fld=(id,lab,val,ph)=>'<label class="field"><span class="lab">'+lab+'</span><input id="'+id+'" value="'+esc(val||"")+'" placeholder="'+esc(ph||"")+'"></label>';
   openModal("Pengaturan",
-    '<div class="panel-title" style="margin-top:0">Koneksi</div>'+
-    fld("set-url","URL Web App (/exec)",RUNTIME_API_URL,"https://script.google.com/macros/s/.../exec")+
-    '<button class="btn sec sm" onclick="testPing()">Tes koneksi</button> <span id="ping-res" class="muted" style="font-size:13px"></span>'+
-    '<p class="muted" style="font-size:12px">Untuk permanen, ubah CONFIG.API_URL di file index.html.</p>'+
-    '<div class="panel-title">Profil perusahaan (tampil di invoice)</div>'+
+    '<div class="panel-title" style="margin-top:0">Profil perusahaan (tampil di invoice)</div>'+
     fld("set-nama","Nama perusahaan",peng.nama_perusahaan)+
     fld("set-alamat","Alamat",peng.alamat)+
     '<div class="grid2">'+fld("set-telp","Telp",peng.telp)+fld("set-email","Email",peng.email)+'</div>'+
     fld("set-logo","URL logo (link gambar)",peng.logo_url,"https://.../logo.png")+
     fld("set-prefix","Awalan no. invoice",peng.prefix_invoice||"INV")+
-    fld("set-footer","Teks footer invoice",peng.footer_invoice,"Terima kasih atas kepercayaan Anda"),
+    fld("set-footer","Teks footer invoice",peng.footer_invoice,"Terima kasih atas kepercayaan Anda")+
+    '<div class="panel-title">Rekening pembayaran (tampil di invoice)</div>'+
+    '<div class="grid2">'+fld("set-bank","Nama bank",peng.bank_nama,"mis. BCA")+fld("set-rek","No. rekening",peng.bank_rekening)+'</div>'+
+    fld("set-an","Atas nama",peng.bank_atasnama),
     '<button class="btn sec" onclick="closeModal()">Tutup</button><button class="btn" onclick="saveSettings()">Simpan</button>');
 }
-async function testPing(){
-  const prev=RUNTIME_API_URL; RUNTIME_API_URL=$("#set-url").value.trim();
-  try{ const d=await api("ping"); $("#ping-res").textContent="OK · "+d.app+" "+d.version; }
-  catch(e){ $("#ping-res").textContent="Gagal: "+e.message; RUNTIME_API_URL=prev; }
-}
 async function saveSettings(){
-  RUNTIME_API_URL=$("#set-url").value.trim();
-  renderSetupBanner();
-  if(!isConfigured()){ toast("URL belum valid","err"); return; }
   try{
     state.peng=await api("savePengaturan",{
       nama_perusahaan:$("#set-nama").value, alamat:$("#set-alamat").value, telp:$("#set-telp").value,
       email:$("#set-email").value, logo_url:$("#set-logo").value, prefix_invoice:$("#set-prefix").value,
-      footer_invoice:$("#set-footer").value });
-    toast("Pengaturan tersimpan","ok"); closeModal(); switchTab("dashboard");
+      footer_invoice:$("#set-footer").value, bank_nama:$("#set-bank").value, bank_rekening:$("#set-rek").value, bank_atasnama:$("#set-an").value });
+    toast("Pengaturan tersimpan","ok"); closeModal();
   }catch(e){ toast(e.message,"err"); }
 }
 function renderSetupBanner(){
@@ -443,6 +476,7 @@ async function loadDashboard(){
         kpiCard("Omset bulan ini",rp(d.omsetBulanIni),d.transaksiBulanIni+" transaksi","leaf")+
         kpiCard("Laba kotor bulan ini",rp(d.labaBulanIni),"jual − beli","blue")+
         kpiCard("Total piutang",rp(d.totalPiutang),d.jumlahPiutang+" invoice belum lunas",d.totalPiutang>0?"amber":"")+
+        kpiCard("Total utang",rp(d.totalUtang||0),(d.jumlahUtang||0)+" faktur ke supplier",(d.totalUtang>0)?"red":"")+
         kpiCard("Nilai stok",rp(d.totalNilaiStok),qty(d.totalQtyStok)+" unit · "+d.totalProduk+" produk","")+
       '</div>'+
       '<div class="card" style="margin-bottom:16px"><div class="panel"><div class="panel-title">Status piutang</div>'+
@@ -593,12 +627,75 @@ async function togglePelanggan(id,aktif){
   catch(e){ toast(e.message,"err"); }
 }
 
+/* ============== SUPPLIER ============== */
+async function loadSupplierCache(force){
+  if(state.supplier.length && !force) return state.supplier;
+  state.supplier=await api("listSupplier",{});
+  syncSupplierDatalist();
+  return state.supplier;
+}
+function supplierByNama(nama){ const k=String(nama||"").trim().toLowerCase(); return state.supplier.find(s=>String(s.nama).trim().toLowerCase()===k); }
+function supplierById(id){ return state.supplier.find(s=>String(s.id)===String(id)); }
+function syncSupplierDatalist(){
+  const dl=$("#supplier-list"); if(!dl) return;
+  dl.innerHTML=state.supplier.filter(s=>String(s.aktif)!=="FALSE").map(s=>'<option value="'+esc(s.nama)+'">'+(s.telp?esc(s.telp):"")+'</option>').join("");
+}
+async function loadSupplier(){
+  try{ await loadSupplierCache(true); renderSupplier(); }
+  catch(e){ $("#tbl-supplier").innerHTML='<tbody><tr><td><div class="empty">Gagal: '+esc(e.message)+'</div></td></tr></tbody>'; }
+}
+function renderSupplier(){
+  const t=$("#tbl-supplier"); const q=($("#sup-cari")?$("#sup-cari").value:"").trim().toLowerCase();
+  let rows=state.supplier;
+  if(q) rows=rows.filter(s=>(String(s.nama)+" "+String(s.telp||"")).toLowerCase().includes(q));
+  if(!state.supplier.length){ t.innerHTML='<tbody><tr><td><div class="empty">Belum ada supplier. Klik “+ Supplier baru”.</div></td></tr></tbody>'; return; }
+  if(!rows.length){ t.innerHTML='<tbody><tr><td><div class="empty">Tidak ada yang cocok dengan “'+esc(q)+'”.</div></td></tr></tbody>'; return; }
+  t.innerHTML='<thead><tr><th>Nama</th><th>Telp</th><th>Alamat</th><th>Aksi</th></tr></thead><tbody>'+
+    rows.slice(0,400).map(r=>{ const aktif=String(r.aktif)!=="FALSE";
+      return '<tr style="'+(aktif?'':'opacity:.5')+'"><td class="strong">'+esc(r.nama)+(aktif?'':' <span class="chip neutral">nonaktif</span>')+'</td>'+
+        '<td>'+esc(r.telp||"—")+'</td><td class="muted">'+esc(r.alamat||"—")+'</td>'+
+        '<td><button class="linkish" onclick="openSupplierForm(\''+r.id+'\')">Edit</button>'+
+        '<button class="linkish" onclick="toggleSupplier(\''+r.id+'\','+(!aktif)+')">'+(aktif?"Nonaktifkan":"Aktifkan")+'</button></td></tr>';
+    }).join("")+'</tbody>';
+}
+function openSupplierForm(id){
+  const p=id?supplierById(id)||{}:{};
+  const f=(k,lab,val,attr)=>'<label class="field"><span class="lab">'+lab+'</span><input id="suf-'+k+'" value="'+esc(val==null?"":val)+'" '+(attr||"")+'></label>';
+  openModal(id?"Edit supplier":"Supplier baru",
+    f("nama","Nama supplier *",p.nama)+
+    '<div class="grid2">'+f("telp","No. telp",p.telp)+f("email","Email",p.email)+'</div>'+
+    f("alamat","Alamat",p.alamat)+f("catatan","Catatan",p.catatan),
+    '<button class="btn sec" onclick="closeModal()">Batal</button><button class="btn" onclick="saveSupplier(\''+(id||"")+'\')">Simpan</button>');
+}
+async function saveSupplier(id){
+  const v=k=>$("#suf-"+k).value;
+  if(!v("nama").trim()){ toast("Nama wajib diisi","err"); return; }
+  try{
+    await api("saveSupplier",{ id:id||undefined, nama:v("nama"), telp:v("telp"), email:v("email"), alamat:v("alamat"), catatan:v("catatan") });
+    toast("Supplier tersimpan","ok"); closeModal(); await loadSupplierCache(true); renderSupplier();
+  }catch(e){ toast(e.message,"err"); }
+}
+async function toggleSupplier(id,aktif){
+  try{ await api("setSupplierAktif",{id,aktif}); await loadSupplierCache(true); renderSupplier(); }
+  catch(e){ toast(e.message,"err"); }
+}
+
 /* ============== STOK MASUK ============== */
 async function initMasuk(){
   await loadProdukCache();
+  await loadSupplierCache();
   if(!$("#pb-tgl").value) $("#pb-tgl").value=todayStr();
+  applyTerminBeli();
   if(!$("#pb-items").children.length) addPembRow();
+  recalcPemb();
   loadPembelian();
+}
+function applyTerminBeli(){
+  const t=$("#pb-termin").value; if(t==="-1") return;
+  const base=$("#pb-tgl").value; if(!base) return;
+  const p=base.split("-"); const d=new Date(+p[0],+p[1]-1,+p[2]); d.setDate(d.getDate()+Number(t));
+  const mm=String(d.getMonth()+1).padStart(2,"0"), dd=String(d.getDate()).padStart(2,"0");
+  $("#pb-jt").value=d.getFullYear()+"-"+mm+"-"+dd;
 }
 function pembRowHtml(){
   return '<div class="item-row pemb-row">'+
@@ -620,27 +717,63 @@ function readPembRows(){
     produk_id:r.querySelector(".pb-prod").value, qty:r.querySelector(".pb-qty").value, harga_beli:r.querySelector(".pb-hb").value
   })).filter(it=>it.produk_id && Number(it.qty)>0);
 }
-function recalcPemb(){ let t=0; readPembRows().forEach(it=>t+=Number(it.qty)*Number(it.harga_beli||0)); $("#pb-total").textContent=rp(t); }
-function resetPemb(){ $("#pb-items").innerHTML=""; addPembRow(); $("#pb-supplier").value=""; $("#pb-faktur").value=""; $("#pb-catatan").value=""; recalcPemb(); }
+function recalcPemb(){
+  let t=0; readPembRows().forEach(it=>t+=Number(it.qty)*Number(it.harga_beli||0));
+  const dp=Math.min(Math.max(Number($("#pb-dp").value)||0,0),t);
+  $("#pb-total").textContent=rp(t);
+  $("#pb-dibayar").textContent=rp(dp);
+  $("#pb-sisa").textContent=rp(t-dp);
+}
+function resetPemb(){
+  $("#pb-items").innerHTML=""; addPembRow();
+  ["pb-supplier","pb-faktur","pb-jt","pb-catatan"].forEach(i=>$("#"+i).value="");
+  $("#pb-dp").value="0"; $("#pb-termin").value="0";
+  if($("#pb-tgl")) $("#pb-tgl").value=todayStr(); applyTerminBeli(); recalcPemb();
+}
 async function submitPembelian(){
   const items=readPembRows();
   if(!items.length){ toast("Tambahkan minimal 1 item dengan qty","err"); return; }
+  if(!$("#pb-supplier").value.trim()){ toast("Supplier wajib diisi","err"); return; }
   try{
-    const d=await api("createPembelian",{ tgl:$("#pb-tgl").value, supplier:$("#pb-supplier").value, no_faktur:$("#pb-faktur").value, catatan:$("#pb-catatan").value, items });
-    toast("Stok masuk tersimpan: "+d.id,"ok"); await loadProdukCache(true); resetPemb(); loadPembelian();
+    const d=await api("createPembelian",{ tgl:$("#pb-tgl").value, supplier:$("#pb-supplier").value, no_faktur:$("#pb-faktur").value,
+      jatuh_tempo:$("#pb-jt").value, uang_muka:$("#pb-dp").value, metode_bayar:$("#pb-metode").value, catatan:$("#pb-catatan").value, items });
+    toast("Pembelian tersimpan: "+d.id+(d.sisa>0?" · utang "+rp(d.sisa):""),"ok");
+    await loadProdukCache(true); resetPemb(); loadPembelian();
   }catch(e){ toast(e.message,"err"); }
 }
 async function loadPembelian(){
   const t=$("#tbl-pemb");
   try{
     const rows=await api("listPembelian",{limit:30}); state.pembelian=rows;
-    if(!rows.length){ t.innerHTML='<tbody><tr><td><div class="empty">Belum ada stok masuk.</div></td></tr></tbody>'; return; }
-    t.innerHTML='<thead><tr><th>ID</th><th>Tanggal</th><th>Supplier</th><th>No. faktur</th><th class="r">Total</th><th>Aksi</th></tr></thead><tbody>'+
-      rows.map(r=>'<tr><td class="strong">'+esc(r.id)+'</td><td>'+fmtTgl(r.tgl)+'</td><td>'+esc(r.supplier||"—")+'</td><td class="muted">'+esc(r.no_faktur||"—")+'</td><td class="r num">'+rp(r.total)+'</td><td><button class="linkish red" onclick="hapusPembelian(\''+r.id+'\')">Hapus</button></td></tr>').join("")+'</tbody>';
+    if(!rows.length){ t.innerHTML='<tbody><tr><td><div class="empty">Belum ada pembelian.</div></td></tr></tbody>'; return; }
+    t.innerHTML='<thead><tr><th>ID</th><th>Tanggal</th><th>Supplier</th><th class="r">Total</th><th class="r">Sisa</th><th>Status</th><th>Aksi</th></tr></thead><tbody>'+
+      rows.map(r=>'<tr><td class="strong">'+esc(r.id)+'</td><td>'+fmtTgl(r.tgl)+'</td><td>'+esc(r.supplier||"—")+'</td>'+
+        '<td class="r num">'+rp(r.total)+'</td><td class="r num">'+(r.sisa>0?rp(r.sisa):"—")+'</td><td>'+statusChip(r.status)+'</td>'+
+        '<td><button class="linkish" onclick="detailPembelian(\''+r.id+'\')">Detail</button>'+
+        '<button class="linkish red" onclick="hapusPembelian(\''+r.id+'\')">Hapus</button></td></tr>').join("")+'</tbody>';
   }catch(e){ t.innerHTML='<tbody><tr><td><div class="empty">Gagal: '+esc(e.message)+'</div></td></tr></tbody>'; }
 }
+async function detailPembelian(id){
+  try{
+    const d=await api("getPembelian",{id}); const h=d.header;
+    const items=d.items.map(it=>'<tr><td>'+esc(it.nama)+'</td><td class="r num">'+qty(it.qty)+' '+esc(it.satuan||"")+'</td><td class="r num">'+rp(it.harga)+'</td><td class="r num">'+rp(it.subtotal)+'</td></tr>').join("");
+    const bayar=d.pembayaran.length? d.pembayaran.map(b=>'<tr><td>'+fmtTgl(b.tgl)+'</td><td>'+esc(b.metode)+'</td><td class="r num">'+rp(b.jumlah)+'</td></tr>').join("") : '<tr><td colspan="3" class="muted">Belum ada pembayaran</td></tr>';
+    openModal("Pembelian "+esc(h.id),
+      '<p style="margin:0 0 4px"><b>'+esc(h.supplier||"-")+'</b> '+statusChip(h.status)+'</p>'+
+      '<p class="muted" style="margin:0 0 14px;font-size:13px">'+fmtTgl(h.tgl)+(h.jatuh_tempo?' · jatuh tempo '+fmtTgl(h.jatuh_tempo):'')+(h.no_faktur?' · ref '+esc(h.no_faktur):'')+'</p>'+
+      '<div class="table-wrap"><table><thead><tr><th>Item</th><th class="r">Qty</th><th class="r">Harga</th><th class="r">Jumlah</th></tr></thead><tbody>'+items+'</tbody></table></div>'+
+      '<div class="penj-sum" style="margin-top:14px">'+
+        '<div class="sum-line grand"><span>Total</span><span class="num">'+rp(h.total)+'</span></div>'+
+        '<div class="sum-line"><span>Dibayar</span><span class="num">'+rp(h.dibayar)+'</span></div>'+
+        '<div class="sum-line"><span>Sisa utang</span><span class="num">'+rp(h.sisa)+'</span></div>'+
+      '</div>'+
+      '<div class="panel-title" style="margin:16px 0 8px">Pembayaran</div><div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Metode</th><th class="r">Jumlah</th></tr></thead><tbody>'+bayar+'</tbody></table></div>',
+      '<button class="btn sec" onclick="closeModal()">Tutup</button>'+
+      (h.sisa>0?'<button class="btn" onclick="bayarBeliModal(\''+h.id+'\','+h.sisa+')">Catat pembayaran</button>':''));
+  }catch(e){ toast(e.message,"err"); }
+}
 async function hapusPembelian(id){
-  if(!confirm("Hapus stok masuk "+id+"? Stok akan dikurangi kembali.")) return;
+  if(!confirm("Hapus pembelian "+id+"? Stok akan dikurangi kembali & pembayaran ikut terhapus.")) return;
   try{ await api("deletePembelian",{id}); toast("Dihapus","ok"); await loadProdukCache(true); loadPembelian(); }
   catch(e){ toast(e.message,"err"); }
 }
@@ -803,12 +936,21 @@ function invoiceHtml(d){
   const rows=items.map((it,i)=>'<tr><td style="text-align:center">'+(i+1)+'</td><td>'+esc(it.nama)+'</td><td style="text-align:right">'+qty(it.qty)+' '+esc(it.satuan||"")+'</td><td style="text-align:right">'+rp(it.harga_jual)+'</td>'+(hasDiskon?'<td style="text-align:right">'+(Number(it.diskon)>0?'−'+rp(it.diskon):'—')+'</td>':'')+'<td style="text-align:right">'+rp(it.subtotal)+'</td></tr>').join("");
   const statusTxt=h.status==="LUNAS"?"LUNAS":(h.status==="SEBAGIAN"?"DIBAYAR SEBAGIAN":"BELUM DIBAYAR");
   const statusColor=h.status==="LUNAS"?"#157347":(h.status==="SEBAGIAN"?"#C97A00":"#C13B3B");
+  const hasBank=c.bank_nama||c.bank_rekening||c.bank_atasnama;
+  const bankBox=hasBank? '<div class="pay-box"><div class="lab">Pembayaran transfer ke</div><table class="pay-tbl">'+
+    (c.bank_nama?'<tr><td>Bank</td><td>'+esc(c.bank_nama)+'</td></tr>':'')+
+    (c.bank_rekening?'<tr><td>No. rekening</td><td><b>'+esc(c.bank_rekening)+'</b></td></tr>':'')+
+    (c.bank_atasnama?'<tr><td>Atas nama</td><td>'+esc(c.bank_atasnama)+'</td></tr>':'')+
+    '</table></div>' : '';
   return '<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Invoice '+esc(h.no_invoice)+'</title>'+
+    '<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" crossorigin="anonymous"><\/script>'+
     '<style>'+
     '*{box-sizing:border-box} body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1B2A22;margin:0;background:#eee}'+
     '.toolbar{position:sticky;top:0;background:#157347;padding:10px 16px;display:flex;gap:10px;justify-content:flex-end}'+
     '.toolbar button{padding:8px 16px;border:none;border-radius:8px;font-weight:700;cursor:pointer}'+
-    '.tb-print{background:#fff;color:#157347} .tb-close{background:rgba(255,255,255,.2);color:#fff}'+
+    '.tb-pdf{background:#FFD24A;color:#1B2A22} .tb-print{background:#fff;color:#157347} .tb-close{background:rgba(255,255,255,.2);color:#fff}'+
+    '.pay-box{margin-top:24px;border:1px solid #E6E3DA;border-radius:8px;padding:12px 14px;display:inline-block;min-width:240px}'+
+    '.pay-box .lab{margin-bottom:2px} .pay-tbl{margin:6px 0 0;font-size:13px;width:auto} .pay-tbl td{border:none;padding:2px 0} .pay-tbl td:first-child{color:#5C6B62;width:110px}'+
     '.page{background:#fff;max-width:800px;margin:18px auto;padding:42px;box-shadow:0 2px 12px rgba(0,0,0,.15)}'+
     '.top{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;border-bottom:2px solid #157347;padding-bottom:18px}'+
     '.comp{font-size:13px;color:#5C6B62;line-height:1.5;margin-top:8px;white-space:pre-line}'+
@@ -826,8 +968,8 @@ function invoiceHtml(d){
     '.foot{margin-top:36px;font-size:13px;color:#5C6B62;border-top:1px solid #eee;padding-top:14px;white-space:pre-line}'+
     '@media print{.toolbar{display:none} body{background:#fff} .page{box-shadow:none;margin:0;max-width:none;padding:24px} @page{size:A4;margin:14mm}}'+
     '</style></head><body>'+
-    '<div class="toolbar"><button class="tb-print" onclick="window.print()">Cetak / Simpan PDF</button><button class="tb-close" onclick="window.close()">Tutup</button></div>'+
-    '<div class="page">'+
+    '<div class="toolbar"><button class="tb-pdf" id="tb-pdf" onclick="unduhPDF()">Unduh PDF</button><button class="tb-print" onclick="window.print()">Cetak</button><button class="tb-close" onclick="window.close()">Tutup</button></div>'+
+    '<div class="page" id="inv-page">'+
       '<div class="top"><div><div>'+logo+'</div><div class="comp">'+esc([c.nama_perusahaan,c.alamat,c.telp,c.email].filter(Boolean).join("\n"))+'</div></div>'+
         '<div><div class="inv-title">INVOICE</div><div class="meta">No: <b>'+esc(h.no_invoice)+'</b><br>Tanggal: '+fmtTgl(h.tgl)+(h.jatuh_tempo?'<br>Jatuh tempo: '+fmtTgl(h.jatuh_tempo):'')+'</div></div></div>'+
       '<div class="parties"><div><div class="lab">Ditagihkan kepada</div><div style="font-weight:700;font-size:15px">'+esc(h.pelanggan||"-")+'</div><div class="comp">'+esc([h.telp,h.alamat].filter(Boolean).join("\n"))+'</div></div></div>'+
@@ -841,9 +983,12 @@ function invoiceHtml(d){
         '<div><span>Sisa tagihan</span><span>'+rp(h.sisa)+'</span></div>'+
       '</div>'+
       '<div class="stamp">'+statusTxt+'</div>'+
+      bankBox+
       (h.catatan?'<div class="foot"><b>Catatan:</b> '+esc(h.catatan)+'</div>':'')+
       (c.footer_invoice?'<div class="foot">'+esc(c.footer_invoice)+'</div>':'')+
-    '</div></body></html>';
+    '</div>'+
+    '<script>function unduhPDF(){var b=document.getElementById("tb-pdf");if(typeof html2pdf==="undefined"){alert("Pustaka PDF belum siap, tunggu sebentar lalu coba lagi.");return;}b.disabled=true;b.textContent="Menyiapkan…";html2pdf().set({margin:8,filename:'+JSON.stringify("Invoice-"+(h.no_invoice||"inv")+".pdf")+',image:{type:"jpeg",quality:0.98},html2canvas:{scale:2,useCORS:true},jsPDF:{unit:"mm",format:"a4",orientation:"portrait"}}).from(document.getElementById("inv-page")).save().then(function(){b.disabled=false;b.textContent="Unduh PDF";}).catch(function(){b.disabled=false;b.textContent="Unduh PDF";alert("Gagal membuat PDF. Coba tombol Cetak lalu pilih Simpan sebagai PDF.");});}<\/script>'+
+    '</body></html>';
 }
 
 /* ============== STOK ============== */
@@ -925,6 +1070,44 @@ async function simpanBayar(id){
   try{ const d=await api("catatPembayaran",{penjualan_id:id,tgl:$("#by-tgl").value,jumlah:$("#by-jml").value,metode:$("#by-metode").value,catatan:$("#by-cat").value});
     toast(d.status==="LUNAS"?"Lunas! ":"Pembayaran tercatat. Sisa "+rp(d.sisa),"ok");
     closeModal(); loadPiutang();
+  }catch(e){ toast(e.message,"err"); }
+}
+
+/* ============== HUTANG ============== */
+async function loadHutang(){
+  const t=$("#tbl-hutang"), sum=$("#hutang-sum");
+  try{
+    const rows=await api("listHutang",{});
+    const total=rows.reduce((a,r)=>a+r.sisa,0);
+    const overdue=rows.filter(r=>r.terlambatHari!==null && r.terlambatHari>0);
+    const overdueAmt=overdue.reduce((a,r)=>a+r.sisa,0);
+    sum.innerHTML='<div class="stats">'+
+      statCard("Total utang",rp(total),rows.length+" faktur",rows.length?"warn":"")+
+      statCard("Jatuh tempo lewat",rp(overdueAmt),overdue.length+" faktur",overdue.length?"warn":"")+'</div>';
+    if(!rows.length){ t.innerHTML='<tbody><tr><td><div class="empty">Tidak ada utang. 🎉</div></td></tr></tbody>'; return; }
+    t.innerHTML='<thead><tr><th>Faktur</th><th>Supplier</th><th>Jatuh tempo</th><th class="r">Total</th><th class="r">Sisa</th><th>Aksi</th></tr></thead><tbody>'+
+      rows.map(r=>{ let jt=fmtTgl(r.jatuh_tempo);
+        if(r.terlambatHari!==null){ if(r.terlambatHari>0) jt='<span class="chip bad">telat '+r.terlambatHari+'h</span>'; else if(r.terlambatHari>=-3) jt='<span class="chip warn">'+fmtTgl(r.jatuh_tempo)+'</span>'; }
+        return '<tr><td class="strong">'+esc(r.no_faktur||r.id)+'</td><td>'+esc(r.supplier||"—")+'</td><td>'+jt+'</td>'+
+          '<td class="r num">'+rp(r.total)+'</td><td class="r num strong">'+rp(r.sisa)+'</td>'+
+          '<td><button class="linkish" onclick="bayarBeliModal(\''+r.id+'\','+r.sisa+')">Catat bayar</button>'+
+          '<button class="linkish" onclick="detailPembelian(\''+r.id+'\')">Detail</button></td></tr>';
+      }).join("")+'</tbody>';
+  }catch(e){ t.innerHTML='<tbody><tr><td><div class="empty">Gagal: '+esc(e.message)+'</div></td></tr></tbody>'; }
+}
+function bayarBeliModal(id,sisa){
+  openModal("Catat pembayaran ke supplier",
+    '<p class="muted" style="margin-top:0;font-size:13px">Sisa utang: <b>'+rp(sisa)+'</b></p>'+
+    '<div class="grid2"><label class="field"><span class="lab">Tanggal</span><input type="date" id="byb-tgl" value="'+todayStr()+'"></label>'+
+    '<label class="field"><span class="lab">Jumlah</span><input type="number" id="byb-jml" min="0" value="'+sisa+'"></label></div>'+
+    '<label class="field"><span class="lab">Metode</span><select id="byb-metode"><option>Tunai</option><option>Transfer</option><option>QRIS</option><option>Lainnya</option></select></label>'+
+    '<label class="field"><span class="lab">Catatan (opsional)</span><input id="byb-cat"></label>',
+    '<button class="btn sec" onclick="closeModal()">Batal</button><button class="btn" onclick="simpanBayarBeli(\''+id+'\')">Simpan</button>');
+}
+async function simpanBayarBeli(id){
+  try{ const d=await api("catatPembayaranBeli",{pembelian_id:id,tgl:$("#byb-tgl").value,jumlah:$("#byb-jml").value,metode:$("#byb-metode").value,catatan:$("#byb-cat").value});
+    toast(d.status==="LUNAS"?"Lunas! ":"Pembayaran tercatat. Sisa "+rp(d.sisa),"ok");
+    closeModal(); loadHutang();
   }catch(e){ toast(e.message,"err"); }
 }
 
