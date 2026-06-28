@@ -978,7 +978,7 @@ function cetakInvoice(id){
 }
 function invoiceHtml(d){
   const h=d.header, c=d.perusahaan||{}, items=d.items||[];
-  const logo=c.logo_url? '<img src="'+esc(c.logo_url)+'" style="max-height:70px;max-width:240px;object-fit:contain">' : '<div style="font-size:22px;font-weight:800;color:#157347">'+esc(c.nama_perusahaan||"")+'</div>';
+  const logo=c.logo_url? '<img src="'+esc(c.logo_url)+'" style="max-height:120px;max-width:240px;object-fit:contain">' : '<div style="font-size:22px;font-weight:800;color:#157347">'+esc(c.nama_perusahaan||"")+'</div>';
   const subtotal=items.reduce((a,it)=>a+Number(it.subtotal||0),0);
   const diskonBaris=items.reduce((a,it)=>a+Number(it.diskon||0),0);
   const diskonTotal=Number(h.diskon_total||0);
