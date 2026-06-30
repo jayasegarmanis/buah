@@ -864,7 +864,8 @@ async function submitPembelian(){
     const d=await api("createPembelian",{ tgl:$("#pb-tgl").value, supplier:$("#pb-supplier").value, no_faktur:$("#pb-faktur").value,
       jatuh_tempo:$("#pb-jt").value, uang_muka:$("#pb-dp").value, metode_bayar:$("#pb-metode").value, catatan:$("#pb-catatan").value, items });
     toast("Pembelian tersimpan: "+d.id+(d.sisa>0?" · utang "+rp(d.sisa):""),"ok");
-    await loadProdukCache(true); resetPemb(); loadPembelian();
+    items.forEach(it=>{ const pr=produkById(it.produk_id); if(pr){ pr.stok=Number(pr.stok||0)+Number(it.qty||0); if(Number(it.harga_beli)>0) pr.harga_beli=Number(it.harga_beli); } }); // sesuaikan stok lokal, tanpa refetch
+    resetPemb(); loadPembelian();
   }catch(e){ toast(e.message,"err"); }
 }
 async function loadPembelian(){
@@ -1011,13 +1012,16 @@ async function submitPenjualan(){
       payload.id=EDIT_PJ.id;
       d=await api("updatePenjualan",payload);
       toast("Invoice "+d.no_invoice+" diperbarui","ok");
+      loadProdukCache(true);   // resync stok di latar (revisi: delta stok kompleks)
     } else {
       payload.uang_muka=$("#pj-dp").value; payload.metode_bayar=$("#pj-metode").value;
       d=await api("createPenjualan",payload);
       toast("Invoice "+d.no_invoice+" dibuat","ok");
+      c.rows.forEach(it=>{ const pr=produkById(it.produk_id); if(pr) pr.stok=Number(pr.stok||0)-Number(it.qty||0); }); // kurangi stok lokal, tanpa refetch
     }
-    await loadProdukCache(true); resetPenj(); loadPenjualan();
-    cetakInvoice(d.id);
+    resetPenj();
+    cetakInvoice(d.id, d);     // cetak langsung dari respons (tanpa fetch lagi)
+    loadPenjualan();           // perbarui daftar di latar
   }catch(e){ toast(e.message,"err"); }
 }
 async function editPenjualan(id){
@@ -1107,12 +1111,19 @@ async function detailInvoice(id){
 }
 
 /* ---- Cetak invoice A4 (jendela baru) ---- */
-function cetakInvoice(id){
+function cetakInvoice(id, payload){
   const w=window.open("","_blank");
   if(!w){ toast("Popup diblokir. Izinkan popup untuk mencetak.","err"); return; }
   w.document.write('<!doctype html><meta charset="utf-8"><body style="font-family:sans-serif;padding:24px">Menyiapkan invoice…</body>');
-  api("getPenjualan",{id}).then(d=>{ w.document.open(); w.document.write(invoiceHtml(d)); w.document.close(); })
-    .catch(e=>{ try{ w.document.body.innerHTML='<p style="color:#b00;font-family:sans-serif;padding:24px">'+esc(e.message)+'</p>'; }catch(_){} });
+  const render=(d)=>{ try{ w.document.open(); w.document.write(invoiceHtml(d)); w.document.close(); }catch(_){} };
+  const fail=(m)=>{ try{ w.document.body.innerHTML='<p style="color:#b00;font-family:sans-serif;padding:24px">'+esc(m)+'</p>'; }catch(_){} };
+  if(payload && payload.header && payload.items){
+    // Cetak langsung dari data hasil simpan — tanpa fetch lagi. Logo dari cache.
+    if(state.peng){ render({header:payload.header, items:payload.items, perusahaan:state.peng}); }
+    else api("getPengaturan").then(p=>{ state.peng=p; render({header:payload.header, items:payload.items, perusahaan:p}); }).catch(()=>render({header:payload.header, items:payload.items, perusahaan:{}}));
+  } else {
+    api("getPenjualan",{id}).then(d=>{ if(d.perusahaan && !state.peng) state.peng=d.perusahaan; render(d); }).catch(e=>fail(e.message));
+  }
 }
 function invoiceHtml(d){
   const h=d.header, c=d.perusahaan||{}, items=d.items||[];
