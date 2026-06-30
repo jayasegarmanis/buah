@@ -98,6 +98,13 @@
   .sum-line.est{color:var(--ink-soft);font-size:13px;border-top:1px dashed var(--line);margin-top:4px;padding-top:8px}
   .item-row .lab{font-size:11px;font-weight:700;color:var(--ink-soft);margin-bottom:4px}
   .item-row .xbtn{background:#fff;border:1px solid var(--line);color:var(--danger);border-radius:8px;width:40px;height:42px;font-size:18px}
+  .prod-pick{position:relative}
+  .pp-list{position:absolute;z-index:60;left:0;right:0;top:100%;margin-top:3px;background:#fff;border:1px solid var(--line);border-radius:9px;box-shadow:0 8px 22px rgba(0,0,0,.14);max-height:260px;overflow:auto}
+  .pp-item{display:flex;justify-content:space-between;gap:10px;padding:8px 11px;cursor:pointer;font-size:13.5px;border-bottom:1px solid #F2F0E8}
+  .pp-item:last-child{border-bottom:none}
+  .pp-item.act,.pp-item:hover{background:#EAF4EC}
+  .pp-nm{color:var(--ink)} .pp-v{color:var(--ink-soft)} .pp-st{color:var(--ink-soft);white-space:nowrap;font-size:12px}
+  .pp-empty{padding:9px 11px;color:var(--ink-soft);font-size:13px}
   .row-hint{font-size:11px;color:var(--ink-soft);margin-top:4px;min-height:13px}
   .total-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 16px;background:var(--leaf-soft);border-radius:10px;margin-top:6px;flex-wrap:wrap}
   .total-bar .big{font-size:20px;font-weight:800;color:var(--leaf-dark)}
@@ -521,14 +528,73 @@ function produkOptions(sel){
 }
 function produkById(id){ return state.produk.find(p=>String(p.id)===String(id)); }
 
+/* ===== Typeahead picker buah (ketik → tersaring; ganti dropdown panjang) ===== */
+function prodPickerHtml(kind){
+  return '<div class="prod-pick">'+
+    '<input type="text" class="pp-search" placeholder="Ketik nama buah…" autocomplete="off" '+
+      'oninput="ppInput(this)" onfocus="ppFilter(this)" onkeydown="ppKey(event,this)" onblur="ppBlur(this)">'+
+    '<input type="hidden" class="'+kind+'-prod">'+
+    '<div class="pp-list" style="display:none"></div></div>';
+}
+function ppHidden(wrap){ return wrap.querySelector(".pj-prod, .pb-prod"); }
+function ppAfter(wrap){
+  if(wrap.closest("#pj-items")) onPenjProd(wrap.querySelector(".pj-prod"));
+  else if(wrap.closest("#pb-items")) onPembProd(wrap.querySelector(".pb-prod"));
+}
+function ppLabel(p){ return p? (p.nama+(p.varietas?" ("+p.varietas+")":"")) : ""; }
+function ppFilter(inp){
+  const wrap=inp.closest(".prod-pick"), list=wrap.querySelector(".pp-list");
+  const q=inp.value.trim().toLowerCase();
+  let arr=state.produk.filter(p=>String(p.aktif)!=="FALSE");
+  if(q) arr=arr.filter(p=>((p.nama||"")+" "+(p.varietas||"")).toLowerCase().includes(q));
+  arr=arr.slice(0,15);
+  if(!arr.length){ list.innerHTML='<div class="pp-empty">Tidak ada buah cocok</div>'; list.style.display="block"; return; }
+  list.innerHTML=arr.map((p,i)=>'<div class="pp-item'+(i===0?" act":"")+'" data-id="'+esc(String(p.id))+'" onmousedown="ppPick(event,this)">'+
+    '<span class="pp-nm">'+esc(p.nama)+(p.varietas?' <span class="pp-v">('+esc(p.varietas)+')</span>':'')+'</span>'+
+    '<span class="pp-st">stok '+qty(p.stok)+' '+esc(p.satuan||"")+'</span></div>').join("");
+  list.style.display="block";
+}
+function ppInput(inp){
+  const wrap=inp.closest(".prod-pick");
+  ppHidden(wrap).value="";        // teks berubah → wajib pilih ulang dari daftar
+  ppFilter(inp);
+  ppAfter(wrap);                  // kosongkan hint & hitung ulang (produk batal terpilih)
+}
+function ppPick(e, el){
+  if(e&&e.preventDefault) e.preventDefault();   // mousedown: jaga fokus dari blur
+  const wrap=el.closest(".prod-pick"), p=produkById(el.getAttribute("data-id"));
+  ppHidden(wrap).value=el.getAttribute("data-id");
+  wrap.querySelector(".pp-search").value=ppLabel(p);
+  wrap.querySelector(".pp-list").style.display="none";
+  ppAfter(wrap);
+}
+function ppKey(e, inp){
+  const wrap=inp.closest(".prod-pick"), list=wrap.querySelector(".pp-list");
+  if(list.style.display==="none"){ if(e.key==="ArrowDown"||e.key==="ArrowUp"){ ppFilter(inp); } return; }
+  const items=Array.from(list.querySelectorAll(".pp-item")); if(!items.length) return;
+  let idx=items.findIndex(x=>x.classList.contains("act"));
+  if(e.key==="ArrowDown"){ e.preventDefault(); idx=Math.min(items.length-1, idx+1); }
+  else if(e.key==="ArrowUp"){ e.preventDefault(); idx=Math.max(0, idx-1); }
+  else if(e.key==="Enter"){ e.preventDefault(); if(idx>=0) ppPick(null, items[idx]); return; }
+  else if(e.key==="Escape"){ list.style.display="none"; return; }
+  else return;
+  items.forEach(x=>x.classList.remove("act"));
+  if(items[idx]){ items[idx].classList.add("act"); items[idx].scrollIntoView({block:"nearest"}); }
+}
+function ppBlur(inp){ const list=inp.closest(".prod-pick").querySelector(".pp-list"); setTimeout(function(){ list.style.display="none"; },150); }
+function ppSetRow(row, kind, id){
+  const wrap=row.querySelector(".prod-pick"); if(!wrap) return;
+  const p=produkById(id);
+  wrap.querySelector("."+kind+"-prod").value=id;
+  wrap.querySelector(".pp-search").value=ppLabel(p)||String(id);
+}
+
 /* ============== DASHBOARD ============== */
 async function loadDashboard(){
   const c=$("#dash");
   if(!isConfigured()){ c.innerHTML='<div class="empty">Sambungkan server dulu lewat Pengaturan.</div>'; return; }
   try{
-    const [d, piutang]=await Promise.all([ api("dashboard"), api("listPiutang",{}) ]);
-    let belumJ=0,belumT=0, telatJ=0,telatT=0;
-    piutang.forEach(r=>{ if(r.terlambatHari!==null && r.terlambatHari>0){ telatJ++; telatT+=r.sisa; } else { belumJ++; belumT+=r.sisa; } });
+    const d=await api("dashboard");
     c.innerHTML=
       '<div class="kpi-row">'+
         kpiCard("Omset bulan ini",rp(d.omsetBulanIni),d.transaksiBulanIni+" transaksi","leaf","jual")+
@@ -537,14 +603,6 @@ async function loadDashboard(){
         kpiCard("Total utang",rp(d.totalUtang||0),(d.jumlahUtang||0)+" faktur ke supplier",(d.totalUtang>0)?"red":"","hutang")+
         kpiCard("Nilai stok",rp(d.totalNilaiStok),qty(d.totalQtyStok)+" unit · "+d.totalProduk+" produk","","stok")+
       '</div>'+
-      '<div class="card" style="margin-bottom:16px"><div class="panel"><div class="panel-title">Status piutang</div>'+
-        '<div class="brk-grid">'+
-          brkCard("Belum jatuh tempo",belumJ,rp(belumT),"amber")+
-          brkCard("Telat / lewat tempo",telatJ,rp(telatT),"red")+
-          brkCard("Total piutang",belumJ+telatJ,rp(belumT+telatT),"neutral")+
-        '</div>'+
-        (piutang.length?'<div style="margin-top:12px"><button class="linkish" onclick="switchTab(\'piutang\')">Buka daftar piutang →</button></div>':'')+
-      '</div></div>'+
       '<div class="card"><div class="panel"><div class="panel-title">Omset & laba kotor — 6 bulan terakhir</div>'+
         '<div class="chart-legend"><span class="lg"><span class="sw" style="background:var(--leaf)"></span>Omset</span>'+
         '<span class="lg"><span class="sw" style="background:var(--amber)"></span>Laba kotor</span></div>'+
@@ -767,7 +825,7 @@ function applyTerminBeli(){
 }
 function pembRowHtml(){
   return '<div class="item-row pemb-row">'+
-    '<div><div class="lab">Buah</div><select class="pb-prod" onchange="onPembProd(this)">'+produkOptions("")+'</select><div class="row-hint pb-hint"></div></div>'+
+    '<div><div class="lab">Buah</div>'+prodPickerHtml("pb")+'<div class="row-hint pb-hint"></div></div>'+
     '<div><div class="lab">Qty</div><input type="number" class="pb-qty num" min="0" step="any" value="" oninput="recalcPemb()"></div>'+
     '<div><div class="lab">Harga beli /satuan</div><input type="number" class="pb-hb num" min="0" value="" oninput="recalcPemb()"></div>'+
     '<div><div class="lab">&nbsp;</div><button class="xbtn" onclick="this.closest(\'.item-row\').remove();recalcPemb()">×</button></div></div>';
@@ -869,7 +927,7 @@ function applyTermin(){
 }
 function penjRowHtml(){
   return '<div class="item-row penj-row">'+
-    '<div><div class="lab">Buah</div><select class="pj-prod" onchange="onPenjProd(this)">'+produkOptions("")+'</select><div class="row-hint pj-hint"></div></div>'+
+    '<div><div class="lab">Buah</div>'+prodPickerHtml("pj")+'<div class="row-hint pj-hint"></div></div>'+
     '<div><div class="lab">Qty</div><input type="number" class="pj-qty num" min="0" step="any" value="" oninput="recalcPenj()"></div>'+
     '<div><div class="lab">Harga /satuan</div><input type="number" class="pj-hj num" min="0" value="" oninput="recalcPenj()"></div>'+
     '<div><div class="lab">Diskon (Rp)</div><input type="number" class="pj-disc num" min="0" value="0" oninput="recalcPenj()"></div>'+
@@ -982,12 +1040,12 @@ async function editPenjualan(id){
     $("#pj-items").innerHTML="";
     (d.items||[]).forEach(it=>{
       addPenjRow();
-      const row=$("#pj-items").lastElementChild, sel=row.querySelector(".pj-prod");
-      sel.innerHTML=produkOptions(it.produk_id); sel.value=it.produk_id;
+      const row=$("#pj-items").lastElementChild;
+      ppSetRow(row, "pj", it.produk_id);
       row.querySelector(".pj-qty").value=it.qty;
       row.querySelector(".pj-hj").value=it.harga_jual;
       row.querySelector(".pj-disc").value=Number(it.diskon||0);
-      onPenjProd(sel);
+      onPenjProd(row.querySelector(".pj-prod"));
     });
     if(!$("#pj-items").children.length) addPenjRow();
     setEditBanner(); recalcPenj(); window.scrollTo({top:0});
@@ -1080,27 +1138,27 @@ function invoiceHtml(d){
     '.toolbar{position:sticky;top:0;background:#157347;padding:10px 16px;display:flex;gap:10px;justify-content:flex-end}'+
     '.toolbar button{padding:8px 16px;border:none;border-radius:8px;font-weight:700;cursor:pointer}'+
     '.tb-pdf{background:#FFD24A;color:#1B2A22} .tb-print{background:#fff;color:#157347} .tb-close{background:rgba(255,255,255,.2);color:#fff}'+
-    '.page{background:#fff;width:794px;max-width:100%;margin:18px auto;padding:40px 44px;box-shadow:0 2px 12px rgba(0,0,0,.15)}'+
-    '.top{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;border-bottom:2px solid #157347;padding-bottom:16px}'+
-    '.brand{display:flex;align-items:center;gap:14px}'+
-    '.logo{max-height:58px;max-width:110px;object-fit:contain}'+
-    '.cname{font-size:17px;font-weight:800;color:#157347;letter-spacing:.01em}'+
-    '.cmeta{font-size:12px;color:#5C6B62;line-height:1.45;margin-top:3px}'+
-    '.inv-title{font-size:28px;font-weight:800;letter-spacing:.04em;color:#157347;text-align:right}'+
-    '.meta{font-size:12.5px;color:#5C6B62;text-align:right;margin-top:6px;line-height:1.6}'+
-    '.parties{margin:20px 0}'+
-    '.lab{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#9aa39d;font-weight:700;margin-bottom:4px}'+
-    '.cust{font-weight:700;font-size:15px} .comp{font-size:12.5px;color:#5C6B62;line-height:1.5;white-space:pre-line;margin-top:2px}'+
-    'table{width:100%;border-collapse:collapse;margin-top:6px;font-size:14px}'+
-    'th{background:#E7F2EC;color:#0F5635;text-align:left;padding:9px 12px;font-size:12px;text-transform:uppercase;letter-spacing:.04em}'+
-    'td{padding:9px 12px;border-bottom:1px solid #eee}'+
-    '.bottom{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-top:18px}'+
-    '.pay-box{border:1px solid #E6E3DA;border-radius:8px;padding:12px 14px;min-width:240px}'+
-    '.pay-box .lab{margin-bottom:2px} .pay-tbl{margin:6px 0 0;font-size:13px;width:auto} .pay-tbl td{border:none;padding:2px 0} .pay-tbl td:first-child{color:#5C6B62;width:104px}'+
-    '.totals{width:280px;font-size:14px;flex:none}'+
-    '.totals div{display:flex;justify-content:space-between;padding:5px 0}'+
-    '.totals .grand{border-top:2px solid #1B2A22;margin-top:6px;padding-top:9px;font-weight:800;font-size:16px}'+
-    '.note{margin-top:22px;font-size:12.5px;color:#5C6B62}'+
+    '.page{background:#fff;width:794px;max-width:100%;margin:18px auto;padding:34px 38px;box-shadow:0 2px 12px rgba(0,0,0,.15);font-size:12px}'+
+    '.top{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;border-bottom:2px solid #157347;padding-bottom:13px}'+
+    '.brand{display:flex;align-items:center;gap:12px}'+
+    '.logo{max-height:50px;max-width:96px;object-fit:contain}'+
+    '.cname{font-size:14px;font-weight:800;color:#157347;letter-spacing:.01em}'+
+    '.cmeta{font-size:10.5px;color:#5C6B62;line-height:1.4;margin-top:2px}'+
+    '.inv-title{font-size:22px;font-weight:800;letter-spacing:.04em;color:#157347;text-align:right}'+
+    '.meta{font-size:11px;color:#5C6B62;text-align:right;margin-top:5px;line-height:1.55}'+
+    '.parties{margin:16px 0}'+
+    '.lab{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#9aa39d;font-weight:700;margin-bottom:3px}'+
+    '.cust{font-weight:700;font-size:13px} .comp{font-size:11px;color:#5C6B62;line-height:1.45;white-space:pre-line;margin-top:2px}'+
+    'table{width:100%;border-collapse:collapse;margin-top:6px;font-size:11.5px}'+
+    'th{background:#E7F2EC;color:#0F5635;text-align:left;padding:7px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.03em}'+
+    'td{padding:6px 10px;border-bottom:1px solid #eee}'+
+    '.bottom{display:flex;justify-content:space-between;align-items:flex-start;gap:22px;margin-top:14px}'+
+    '.pay-box{border:1px solid #E6E3DA;border-radius:8px;padding:10px 12px;min-width:220px}'+
+    '.pay-box .lab{margin-bottom:2px} .pay-tbl{margin:5px 0 0;font-size:11px;width:auto} .pay-tbl td{border:none;padding:2px 0} .pay-tbl td:first-child{color:#5C6B62;width:88px}'+
+    '.totals{width:262px;font-size:11.5px;flex:none}'+
+    '.totals div{display:flex;justify-content:space-between;padding:4px 0}'+
+    '.totals .grand{border-top:2px solid #1B2A22;margin-top:5px;padding-top:8px;font-weight:800;font-size:13.5px}'+
+    '.note{margin-top:18px;font-size:11px;color:#5C6B62}'+
     '@media print{.toolbar{display:none} body{background:#fff} .page{box-shadow:none;margin:0;width:auto;max-width:none;padding:0} @page{size:A4;margin:14mm}}'+
     '</style></head><body>'+
     '<div class="toolbar"><button class="tb-pdf" id="tb-pdf" onclick="unduhPDF()">Unduh PDF</button><button class="tb-print" onclick="window.print()">Cetak</button><button class="tb-close" onclick="window.close()">Tutup</button></div>'+
