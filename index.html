@@ -105,6 +105,17 @@
   .pp-item.act,.pp-item:hover{background:#EAF4EC}
   .pp-nm{color:var(--ink)} .pp-v{color:var(--ink-soft)} .pp-st{color:var(--ink-soft);white-space:nowrap;font-size:12px}
   .pp-empty{padding:9px 11px;color:var(--ink-soft);font-size:13px}
+  .filter-bar{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:10px}
+  .filter-bar .field{margin:0}
+  .nm-link{padding:0;font-weight:600;text-align:left}
+  .btn-act{background:#fff;border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+  .btn-act:hover{background:#F4F3EE}
+  .act-pop{position:fixed;z-index:200;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.18);min-width:210px;padding:6px;display:none}
+  .act-item{display:block;width:100%;text-align:left;background:none;border:none;padding:9px 12px;border-radius:7px;font-size:14px;color:var(--ink);cursor:pointer}
+  .act-item:hover{background:#EAF4EC}
+  .act-item.red{color:var(--danger)}
+  .kpi.kpi-link.sel{outline:2px solid var(--leaf);outline-offset:1px}
+  .kontak-name{font-size:22px;font-weight:800;margin-top:6px}
   .row-hint{font-size:11px;color:var(--ink-soft);margin-top:4px;min-height:13px}
   .total-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 16px;background:var(--leaf-soft);border-radius:10px;margin-top:6px;flex-wrap:wrap}
   .total-bar .big{font-size:20px;font-weight:800;color:var(--leaf-dark)}
@@ -320,9 +331,18 @@
         <button class="btn sec" onclick="resetPenj()">Bersihkan</button>
       </div>
     </div></div>
-    <div class="card"><div class="panel"><div class="panel-title">Penjualan terakhir</div></div>
+    <div class="card"><div class="panel"><div class="panel-title">Penjualan terakhir</div>
+      <div class="filter-bar">
+        <label class="field"><span class="lab">Dari tgl</span><input type="date" id="pj-f-dari" onchange="loadPenjualan()"></label>
+        <label class="field"><span class="lab">Sampai tgl</span><input type="date" id="pj-f-sampai" onchange="loadPenjualan()"></label>
+        <label class="field" style="flex:1;min-width:160px"><span class="lab">Pelanggan</span><input id="pj-f-plg" placeholder="Saring nama pelanggan…" oninput="pjFilterDebounce()"></label>
+        <button class="btn sec sm" onclick="resetPjFilter()" style="align-self:flex-end">Reset</button>
+      </div></div>
       <div class="table-wrap"><table id="tbl-jual"></table></div></div>
   </section>
+
+  <!-- KONTAK (detail pelanggan) -->
+  <section class="view" data-view="kontak"><div id="kontak-body"></div></section>
 
   <!-- STOK -->
   <section class="view" data-view="stok">
@@ -360,6 +380,7 @@
 </main>
 
 <div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
+<div id="act-pop" class="act-pop"></div>
 <div id="toasts"></div>
 <div id="loading"><div class="spin"></div></div>
 
@@ -589,6 +610,115 @@ function ppSetRow(row, kind, id){
   wrap.querySelector(".pp-search").value=ppLabel(p)||String(id);
 }
 
+/* ===== Link nama pelanggan → halaman kontak ===== */
+function nmLink(nama){ if(!nama) return "—"; return '<button class="linkish nm-link" data-nama="'+esc(nama)+'" onclick="openKontak(this.dataset.nama)">'+esc(nama)+'</button>'; }
+function currentActiveView(){ const v=document.querySelector(".view.active"); return v?v.dataset.view:null; }
+
+/* ===== Dropdown "Tindakan" per invoice (popup fixed, anti-terpotong) ===== */
+var ACT_OPEN=null;
+function actBtn(id,sisa){ return '<button class="btn-act" onclick="toggleActions(event,\''+id+'\','+(Number(sisa)||0)+')">Tindakan ▾</button>'; }
+function toggleActions(ev,id,sisa){
+  ev.stopPropagation();
+  const pop=$("#act-pop");
+  if(ACT_OPEN===id && pop.style.display==="block"){ closeActions(); return; }
+  ACT_OPEN=id;
+  let items=[
+    {l:"Pratinjau / cetak faktur",on:"cetakInvoice('"+id+"')"},
+    {l:"Detail transaksi",on:"detailInvoice('"+id+"')"}
+  ];
+  if(Number(sisa)>0.0001) items.push({l:"Terima pembayaran",on:"bayarModal('"+id+"',"+Number(sisa)+")"});
+  items.push({l:"Edit / revisi",on:"editPenjualan('"+id+"')"});
+  items.push({l:"Salin transaksi",on:"salinPenjualan('"+id+"')"});
+  items.push({l:"Hapus",on:"hapusPenjualan('"+id+"')",red:true});
+  pop.innerHTML=items.map(it=>'<button class="act-item'+(it.red?" red":"")+'" onclick="closeActions();'+it.on+'">'+esc(it.l)+'</button>').join("");
+  pop.style.display="block"; pop.style.visibility="hidden";
+  const r=ev.currentTarget.getBoundingClientRect(), pw=pop.offsetWidth, ph=pop.offsetHeight;
+  let left=r.right-pw; if(left<8) left=8;
+  let top=r.bottom+4; if(top+ph>window.innerHeight-8) top=Math.max(8,r.top-ph-4);
+  pop.style.left=left+"px"; pop.style.top=top+"px"; pop.style.visibility="visible";
+}
+function closeActions(){ const p=$("#act-pop"); if(p) p.style.display="none"; ACT_OPEN=null; }
+document.addEventListener("click", closeActions);
+
+/* ===== Salin transaksi (duplikat invoice jadi invoice baru) ===== */
+async function salinPenjualan(id){
+  try{
+    await loadProdukCache(); await loadPelangganCache();
+    const d=await api("getPenjualan",{id}); const h=d.header;
+    document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab==="jual"));
+    document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v.dataset.view==="jual"));
+    EDIT_PJ=null;
+    $("#pj-pelanggan").value=h.pelanggan||""; $("#pj-telp").value=h.telp||""; $("#pj-alamat").value=h.alamat||"";
+    $("#pj-tgl").value=todayStr(); $("#pj-termin").value="0"; applyTermin();
+    $("#pj-disc-mode").value="rp"; $("#pj-disc-total").value=Number(h.diskon_total||0);
+    $("#pj-ongkir").value=Number(h.ongkir||0); $("#pj-catatan").value=h.catatan||""; $("#pj-dp").value="0";
+    $("#pj-items").innerHTML="";
+    (d.items||[]).forEach(it=>{ addPenjRow(); const row=$("#pj-items").lastElementChild; ppSetRow(row,"pj",it.produk_id);
+      row.querySelector(".pj-qty").value=it.qty; row.querySelector(".pj-hj").value=it.harga_jual; row.querySelector(".pj-disc").value=Number(it.diskon||0); onPenjProd(row.querySelector(".pj-prod")); });
+    if(!$("#pj-items").children.length) addPenjRow();
+    setEditBanner(); recalcPenj(); window.scrollTo({top:0});
+    toast("Disalin ke invoice baru — periksa lalu simpan","ok");
+  }catch(e){ toast(e.message,"err"); }
+}
+
+/* ===== Halaman Kontak (detail pelanggan + tab transaksi) ===== */
+var KONTAK_BACK="jual", KONTAK_DATA=null, KONTAK_FILTER="all";
+async function openKontak(nama){
+  if(!nama) return;
+  const cur=currentActiveView(); if(cur && cur!=="kontak") KONTAK_BACK=cur;
+  document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
+  document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v.dataset.view==="kontak"));
+  window.scrollTo({top:0});
+  const body=$("#kontak-body"); body.innerHTML='<div class="empty">Memuat data pelanggan…</div>';
+  try{
+    const d=await api("pelangganDetail",{nama}); KONTAK_DATA=d; KONTAK_FILTER="all";
+    body.innerHTML=kontakHtml(d); renderKontakTrx(); fitKpiValues();
+  }catch(e){ body.innerHTML='<div class="empty">Gagal memuat: '+esc(e.message)+' &nbsp; <button class="linkish" onclick="switchTab(KONTAK_BACK)">← Kembali</button></div>'; }
+}
+function kontakHtml(d){
+  const k=d.kpi;
+  return '<div class="view-head" style="margin-bottom:4px"><button class="linkish" onclick="switchTab(KONTAK_BACK)">← Kembali</button></div>'+
+    '<div class="kontak-name">'+esc(d.nama)+' <span class="chip neutral">Pelanggan</span></div>'+
+    '<div class="muted" style="font-size:13px;margin-top:2px">'+esc([d.telp,d.alamat,d.email].filter(Boolean).join(" · ")||"—")+'</div>'+
+    '<div style="margin-top:10px"><button class="btn sec sm" onclick="buatInvoiceKontak()">+ Buat invoice untuk pelanggan ini</button></div>'+
+    '<div class="kpi-row" style="margin-top:14px">'+
+      kpiClick("Piutang belum dibayar",rp(k.belum.total),k.belum.count+" invoice","amber","belum")+
+      kpiClick("Piutang jatuh tempo",rp(k.jatuhTempo.total),k.jatuhTempo.count+" invoice","red","jatuhTempo")+
+      kpiClick("Total pembayaran",rp(k.pembayaran.total),k.pembayaran.count+" pembayaran","leaf","bayar")+
+      kpiClick("Semua transaksi",String(d.transaksi.length),"klik untuk lihat semua","blue","all")+
+    '</div>'+
+    '<div class="card" style="margin-top:14px"><div class="table-wrap"><table id="kontak-trx"></table></div></div>';
+}
+function kpiClick(label,val,sub,cls,f){
+  return '<div class="kpi '+(cls||"")+' kpi-link'+(KONTAK_FILTER===f?" sel":"")+'" role="button" tabindex="0" onclick="setKontakFilter(\''+f+'\')"><div class="k-label">'+esc(label)+'</div><div class="k-val num">'+esc(val)+'</div><div class="k-sub">'+esc(sub)+'</div></div>';
+}
+function setKontakFilter(f){ if(!KONTAK_DATA) return; KONTAK_FILTER=f; $("#kontak-body").innerHTML=kontakHtml(KONTAK_DATA); renderKontakTrx(); fitKpiValues(); }
+function renderKontakTrx(){
+  const t=$("#kontak-trx"); if(!t||!KONTAK_DATA) return;
+  let rows=KONTAK_DATA.transaksi;
+  if(KONTAK_FILTER==="belum") rows=rows.filter(r=>r.sisa>0.0001);
+  else if(KONTAK_FILTER==="jatuhTempo") rows=rows.filter(r=>r.sisa>0.0001 && r.terlambatHari!==null && r.terlambatHari>0);
+  else if(KONTAK_FILTER==="bayar") rows=rows.filter(r=>r.dibayar>0.0001);
+  if(!rows.length){ t.innerHTML='<tbody><tr><td><div class="empty">Tidak ada transaksi pada kategori ini.</div></td></tr></tbody>'; return; }
+  t.innerHTML='<thead><tr><th>Tgl. transaksi</th><th>No. transaksi</th><th>Jatuh tempo</th><th>Status</th><th class="r">Total</th><th class="r">Sisa</th><th>Tindakan</th></tr></thead><tbody>'+
+    rows.map(r=>{ let jt=fmtTgl(r.jatuh_tempo); if(r.terlambatHari!==null && r.terlambatHari>0) jt='<span class="chip bad">telat '+r.terlambatHari+'h</span>'; else if(r.terlambatHari!==null && r.terlambatHari>=-3 && r.sisa>0) jt='<span class="chip warn">'+fmtTgl(r.jatuh_tempo)+'</span>';
+      return '<tr><td>'+fmtTgl(r.tgl)+'</td><td><button class="linkish" onclick="detailInvoice(\''+r.id+'\')">'+esc(r.no_invoice)+'</button></td>'+
+        '<td>'+jt+'</td><td>'+statusChip(r.status)+'</td><td class="r num">'+rp(r.total)+'</td><td class="r num">'+(r.sisa>0?rp(r.sisa):"—")+'</td>'+
+        '<td>'+actBtn(r.id,r.sisa)+'</td></tr>';
+    }).join("")+'</tbody>';
+}
+function buatInvoiceKontak(){ if(KONTAK_DATA) buatInvoiceUntuk(KONTAK_DATA.nama,KONTAK_DATA.telp,KONTAK_DATA.alamat); }
+async function buatInvoiceUntuk(nama,telp,alamat){
+  await loadProdukCache(); await loadPelangganCache();
+  document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab==="jual"));
+  document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v.dataset.view==="jual"));
+  resetPenj();
+  $("#pj-pelanggan").value=nama||""; $("#pj-telp").value=telp||""; $("#pj-alamat").value=alamat||"";
+  loadPenjualan(); window.scrollTo({top:0});
+}
+function pjFilterDebounce(){ clearTimeout(window._pjFt); window._pjFt=setTimeout(loadPenjualan,350); }
+function resetPjFilter(){ ["pj-f-dari","pj-f-sampai","pj-f-plg"].forEach(i=>{ if($("#"+i)) $("#"+i).value=""; }); loadPenjualan(); }
+
 /* ============== DASHBOARD ============== */
 async function loadDashboard(){
   const c=$("#dash");
@@ -723,7 +853,7 @@ function renderPelanggan(){
   if(!rows.length){ t.innerHTML='<tbody><tr><td><div class="empty">Tidak ada yang cocok dengan “'+esc(q)+'”.</div></td></tr></tbody>'; return; }
   t.innerHTML='<thead><tr><th>Nama</th><th>Telp</th><th>Alamat</th><th>Aksi</th></tr></thead><tbody>'+
     rows.slice(0,400).map(r=>{ const aktif=String(r.aktif)!=="FALSE";
-      return '<tr style="'+(aktif?'':'opacity:.5')+'"><td class="strong">'+esc(r.nama)+(aktif?'':' <span class="chip neutral">nonaktif</span>')+'</td>'+
+      return '<tr style="'+(aktif?'':'opacity:.5')+'"><td class="strong">'+nmLink(r.nama)+(aktif?'':' <span class="chip neutral">nonaktif</span>')+'</td>'+
         '<td>'+esc(r.telp||"—")+'</td><td class="muted">'+esc(r.alamat||"—")+'</td>'+
         '<td><button class="linkish" onclick="openPelangganForm(\''+r.id+'\')">Edit</button>'+
         '<button class="linkish" onclick="togglePelanggan(\''+r.id+'\','+(!aktif)+')">'+(aktif?"Nonaktifkan":"Aktifkan")+'</button></td></tr>';
@@ -1063,16 +1193,16 @@ function statusChip(s){
 }
 async function loadPenjualan(){
   const t=$("#tbl-jual");
+  const dari=$("#pj-f-dari")?$("#pj-f-dari").value:"", sampai=$("#pj-f-sampai")?$("#pj-f-sampai").value:"", plg=$("#pj-f-plg")?$("#pj-f-plg").value.trim():"";
+  const hasFilter=!!(dari||sampai||plg);
   try{
-    const rows=await api("listPenjualan",{limit:30}); state.penjualan=rows;
-    if(!rows.length){ t.innerHTML='<tbody><tr><td><div class="empty">Belum ada penjualan.</div></td></tr></tbody>'; return; }
-    t.innerHTML='<thead><tr><th>Invoice</th><th>Tanggal</th><th>Pelanggan</th><th class="r">Total</th><th class="r">Sisa</th><th>Status</th><th>Aksi</th></tr></thead><tbody>'+
-      rows.map(r=>'<tr><td class="strong">'+esc(r.no_invoice)+'</td><td>'+fmtTgl(r.tgl)+'</td><td>'+esc(r.pelanggan||"—")+'</td>'+
+    const rows=await api("listPenjualan",{dari,sampai,pelanggan:plg,limit:hasFilter?300:30}); state.penjualan=rows;
+    if(!rows.length){ t.innerHTML='<tbody><tr><td><div class="empty">'+(hasFilter?"Tidak ada penjualan sesuai filter.":"Belum ada penjualan.")+'</div></td></tr></tbody>'; return; }
+    t.innerHTML='<thead><tr><th>Invoice</th><th>Tanggal</th><th>Pelanggan</th><th class="r">Total</th><th class="r">Sisa</th><th>Status</th><th>Tindakan</th></tr></thead><tbody>'+
+      rows.map(r=>'<tr><td class="strong">'+esc(r.no_invoice)+'</td><td>'+fmtTgl(r.tgl)+'</td><td>'+nmLink(r.pelanggan)+'</td>'+
         '<td class="r num">'+rp(r.total)+'</td><td class="r num">'+(r.sisa>0?rp(r.sisa):"—")+'</td><td>'+statusChip(r.status)+'</td>'+
-        '<td><button class="linkish" onclick="editPenjualan(\''+r.id+'\')">Edit</button>'+
-        '<button class="linkish" onclick="cetakInvoice(\''+r.id+'\')">Cetak</button>'+
-        '<button class="linkish" onclick="detailInvoice(\''+r.id+'\')">Detail</button>'+
-        '<button class="linkish red" onclick="hapusPenjualan(\''+r.id+'\')">Hapus</button></td></tr>').join("")+'</tbody>';
+        '<td>'+actBtn(r.id,r.sisa)+'</td></tr>').join("")+'</tbody>'+
+      (hasFilter&&rows.length>=300?'<tfoot><tr><td colspan="7" class="muted" style="padding:10px">Menampilkan 300 teratas. Persempit filter bila perlu.</td></tr></tfoot>':'');
   }catch(e){ t.innerHTML='<tbody><tr><td><div class="empty">Gagal: '+esc(e.message)+'</div></td></tr></tbody>'; }
 }
 async function hapusPenjualan(id){
@@ -1252,13 +1382,12 @@ async function loadPiutang(){
       statCard("Total piutang",rp(total),rows.length+" invoice",rows.length?"warn":"")+
       statCard("Jatuh tempo lewat",rp(overdueAmt),overdue.length+" invoice",overdue.length?"warn":"")+'</div>';
     if(!rows.length){ t.innerHTML='<tbody><tr><td><div class="empty">Tidak ada piutang. 🎉</div></td></tr></tbody>'; return; }
-    t.innerHTML='<thead><tr><th>Invoice</th><th>Pelanggan</th><th>Jatuh tempo</th><th class="r">Total</th><th class="r">Sisa</th><th>Aksi</th></tr></thead><tbody>'+
+    t.innerHTML='<thead><tr><th>Invoice</th><th>Pelanggan</th><th>Jatuh tempo</th><th class="r">Total</th><th class="r">Sisa</th><th>Tindakan</th></tr></thead><tbody>'+
       rows.map(r=>{ let jt=fmtTgl(r.jatuh_tempo);
         if(r.terlambatHari!==null){ if(r.terlambatHari>0) jt='<span class="chip bad">telat '+r.terlambatHari+'h</span>'; else if(r.terlambatHari>=-3) jt='<span class="chip warn">'+fmtTgl(r.jatuh_tempo)+'</span>'; }
-        return '<tr><td class="strong">'+esc(r.no_invoice)+'</td><td>'+esc(r.pelanggan||"—")+'</td><td>'+jt+'</td>'+
+        return '<tr><td class="strong">'+esc(r.no_invoice)+'</td><td>'+nmLink(r.pelanggan)+'</td><td>'+jt+'</td>'+
           '<td class="r num">'+rp(r.total)+'</td><td class="r num strong">'+rp(r.sisa)+'</td>'+
-          '<td><button class="linkish" onclick="bayarModal(\''+r.id+'\','+r.sisa+')">Catat bayar</button>'+
-          '<button class="linkish" onclick="cetakInvoice(\''+r.id+'\')">Cetak</button></td></tr>';
+          '<td>'+actBtn(r.id,r.sisa)+'</td></tr>';
       }).join("")+'</tbody>';
   }catch(e){ t.innerHTML='<tbody><tr><td><div class="empty">Gagal: '+esc(e.message)+'</div></td></tr></tbody>'; }
 }
